@@ -171,6 +171,7 @@ export function App(): JSX.Element {
         onClose={() => setPaletteOpen(false)}
         staticActions={paletteActions}
         onPickVersion={selectVersion}
+        versionCount={stats?.stats.versions}
       />
 
       <main>

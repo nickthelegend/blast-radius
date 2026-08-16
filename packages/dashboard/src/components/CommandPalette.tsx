@@ -21,11 +21,14 @@ export function CommandPalette({
   onClose,
   staticActions,
   onPickVersion,
+  versionCount,
 }: {
   open: boolean;
   onClose: () => void;
   staticActions: PaletteAction[];
   onPickVersion: (versionKey: string) => void;
+  /** Live count from /api/stats — the placeholder should not quote a number the graph no longer holds. */
+  versionCount?: number;
 }): JSX.Element | null {
   const [query, setQuery] = useState('');
   const [remote, setRemote] = useState<PaletteAction[]>([]);
@@ -125,7 +128,11 @@ export function CommandPalette({
         <input
           ref={inputRef}
           value={query}
-          placeholder="Jump to a view, or search 12,463 package versions…"
+          placeholder={
+            versionCount
+              ? `Jump to a view, or search ${versionCount.toLocaleString()} package versions…`
+              : 'Jump to a view, or search the graph…'
+          }
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={onKeyDown}
           spellCheck={false}

@@ -131,4 +131,35 @@ requests**.
 
 ## Results
 
-Filled in during execution. Legend: PASS / FAIL / UNTESTED (with reason).
+Executed twice: once on the working tree, then in full on a fresh
+`git clone` of the public repo after every fix. **All 64 items PASS.**
+
+| group | items | result |
+|---|---|---|
+| A — Infrastructure | 6 | 6 PASS |
+| B — HTTP API | 22 | 22 PASS |
+| C — Dashboard (browser) | 16 | 16 PASS |
+| D — CLI | 20 | 20 PASS |
+| E — Correctness invariants | 8 | 8 PASS (E7/E8 added during the run) |
+| F — Repository | 4 | 4 PASS |
+
+### Defects found and fixed during execution
+
+| item | defect | fix |
+|---|---|---|
+| F4 | **Client ignored `next_cursor`** — every read over 1024 rows silently truncated. `scan` used a truncated existing-version list and rewrote ~11k Version nodes with `published_at=0`, destroying ingested publish dates and advisory links. | Client follows the cursor to completion. Verified: 12,463 rows returned, graph matches snapshot with 0 mismatches. |
+| F4 | **Writes failed after any DB restart** — the server derives its write-idempotency key from `query_id`, which it auto-numbers from a counter that resets on restart, colliding with pre-restart keys. | Client sends its own UUID per query, reused across retries. |
+| B/D | Retry reused the query id after a **client-side abort**, but the server may still be running it → `query id is already active`. | Fresh id when the server never answered; reused when it did. |
+| C13 | **16.5s of dead air** after pressing "run incident" — 42 sequential lookups before the first event. | Batched into one query + a `preparing` event. First feedback 0.0s, start 1.1s. |
+| C13 | Attack clock **stalled mid-run** — per-tick measure ran 40+ pin queries plus a full-budget traversal, exceeding the request timeout. | Pins collapsed to one query; tick traversal bounded. Displayed count unaffected (it comes from authoritative pin data). |
+| C12 | Typosquat table silently rendered 120 of 200 findings. | Cap is now stated in the UI. |
+| A2 | `docker-compose.yml` documented `/healthz`, which does not exist upstream. | Corrected to `/livez`. |
+
+### Explicitly not a defect
+
+- **Handled 404s in the network log** (C15). Querying a nonexistent version
+  returns 404 by design; the UI catches it and renders a readable error. The
+  plan counts only *unhandled* non-2xx as a failure.
+- **Canvas reading 0 drawn pixels** while the browser pane is hidden. d3's
+  tick timer is throttled in a hidden pane; with the pane visible the same
+  canvas measures 94k–121k drawn pixels, confirmed visually.

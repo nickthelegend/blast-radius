@@ -101,7 +101,13 @@ export function ForceGraph({
   const viewRef = useRef({ x: 0, y: 0, k: 1 });
   const [transformed, setTransformed] = useState(false);
   const [locked, setLocked] = useState<GraphNode | null>(null);
+  /** Filter the plot to a single hop band. The rings are a real distance scale,
+   *  so making them clickable turns the plot into an instrument. */
+  const [bandFilter, setBandFilter] = useState<number | null>(null);
+  const bandRef = useRef<number | null>(null);
+  const [bandCounts, setBandCounts] = useState<Array<{ depth: number; count: number }>>([]);
   const resetViewRef = useRef<() => void>(() => undefined);
+  const setBandRef = useRef<(depth: number | null) => void>(() => undefined);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -210,6 +216,18 @@ export function ForceGraph({
       }
     }
     const maxDepth = Math.max(...depthOf.values(), 1);
+    {
+      // Publish the band populations so the control strip can label itself.
+      const tally = new Map<number, number>();
+      for (const depth of depthOf.values()) tally.set(depth, (tally.get(depth) ?? 0) + 1);
+      const rows = [...tally.entries()]
+        .filter(([depth]) => depth > 0 && depth <= 6)
+        .sort((a, b) => a[0] - b[0])
+        .map(([depth, count]) => ({ depth, count }));
+      setBandCounts((previous) =>
+        JSON.stringify(previous) === JSON.stringify(rows) ? previous : rows,
+      );
+    }
     // Bands are spaced to fill the plot, with the outermost inside the frame.
     const band = Math.min(width, height) * 0.46 / Math.max(1, maxDepth);
     const ringFor = (id: number): number => (depthOf.get(id) ?? maxDepth) * band;
@@ -278,10 +296,13 @@ export function ForceGraph({
         for (let depth = 1; depth <= Math.min(maxDepth, 6); depth++) {
           const radius = ringRadius(depth);
           if (radius < 24) continue;
-          ctx.strokeStyle = '#453e35';
+          const selectedBand = bandRef.current === depth;
+          ctx.strokeStyle = selectedBand ? BUFF : '#453e35';
+          ctx.lineWidth = selectedBand ? 1.5 : 1;
           ctx.beginPath();
           ctx.arc(source.x, source.y!, radius, 0, Math.PI * 2);
           ctx.stroke();
+          ctx.lineWidth = 1;
           // The ring's own label, set on the ring where a chart puts it.
           ctx.setLineDash([]);
           ctx.fillStyle = INK_3;
@@ -322,6 +343,16 @@ export function ForceGraph({
         if (a.x === undefined || b.x === undefined) continue;
         const onChain = lit ? lit.has(a.id) && lit.has(b.id) : false;
         const highlighted = highlight?.has(a.id) && highlight?.has(b.id);
+        const band = bandRef.current;
+        if (band !== null && depthOf.get(a.id) !== band && depthOf.get(b.id) !== band) {
+          ctx.strokeStyle = 'rgba(111,102,90,0.07)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y!);
+          ctx.lineTo(b.x, b.y!);
+          ctx.stroke();
+          continue;
+        }
         ctx.strokeStyle = onChain
           ? 'rgba(227,172,87,0.9)'
           : lit
@@ -350,7 +381,9 @@ export function ForceGraph({
         if (node.x === undefined) continue;
         const isSource = node.id === sourceId;
         const onChain = lit ? lit.has(node.id) : false;
-        const dimmed = lit !== null && !onChain;
+        const band = bandRef.current;
+        const outsideBand = band !== null && depthOf.get(node.id) !== band;
+        const dimmed = (lit !== null && !onChain) || outsideBand;
         const isHighlighted = highlight?.has(node.id);
         const radius = isSource ? 11 : node.label === 'Repo' ? 7 : 4.5;
 
@@ -568,6 +601,12 @@ export function ForceGraph({
       raf = requestAnimationFrame(animate);
     };
 
+    setBandRef.current = (depth: number | null) => {
+      bandRef.current = depth;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(animate);
+    };
+
     resetViewRef.current = () => {
       viewRef.current = { x: 0, y: 0, k: 1 };
       setTransformed(false);
@@ -603,6 +642,38 @@ export function ForceGraph({
         >
           reset view
         </button>
+      )}
+      {bandCounts.length > 0 && (
+        <div className="band-strip" role="group" aria-label="Filter by dependency depth">
+          <span className="band-label">hops</span>
+          {bandCounts.map((band) => (
+            <button
+              key={band.depth}
+              className={`band${bandFilter === band.depth ? ' active' : ''}`}
+              aria-pressed={bandFilter === band.depth}
+              onClick={() => {
+                const next = bandFilter === band.depth ? null : band.depth;
+                setBandFilter(next);
+                setBandRef.current(next);
+              }}
+              title={`${band.count} nodes ${band.depth} hop${band.depth === 1 ? '' : 's'} from ground zero`}
+            >
+              {band.depth}
+              <span className="band-count">{band.count}</span>
+            </button>
+          ))}
+          {bandFilter !== null && (
+            <button
+              className="band clear"
+              onClick={() => {
+                setBandFilter(null);
+                setBandRef.current(null);
+              }}
+            >
+              all
+            </button>
+          )}
+        </div>
       )}
       <div className="graph-legend">
         <span>

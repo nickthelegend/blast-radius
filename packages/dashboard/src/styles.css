@@ -1178,3 +1178,50 @@ tbody tr.row-selected td:first-child { color: var(--ink); }
 .suggestions .pill { cursor: pointer; color: var(--survey); border-color: var(--survey-deep); }
 .suggestions .pill::before { display: none; }
 .suggestions .pill:hover { background: var(--survey); color: var(--ground); }
+
+/* The distance scale as a control. The rings already measure dependency depth;
+   these select a band and dim everything outside it. */
+.band-strip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: var(--ground);
+  border: 1px solid var(--rule);
+}
+.band-label {
+  display: flex;
+  align-items: center;
+  padding: 0 9px;
+  font-family: var(--cond);
+  font-size: var(--t);
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border-right: 1px solid var(--rule);
+}
+.band {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--rule);
+  border-bottom: 2px solid transparent;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: var(--t);
+  cursor: pointer;
+}
+.band:last-child { border-right: none; }
+.band:hover { background: var(--sheet-2); color: var(--ink); }
+.band.active { color: var(--buff); border-bottom-color: var(--buff); background: var(--sheet-2); }
+.band-count { color: var(--ink-3); font-size: var(--t); }
+.band.active .band-count { color: var(--buff); }
+.band.clear { font-family: var(--cond); letter-spacing: 0.09em; text-transform: uppercase; }
+
+@media (max-width: 640px) { .band-strip { display: none; } }

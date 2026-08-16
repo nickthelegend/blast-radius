@@ -45,11 +45,18 @@ export function ForceGraph({
   highlight?: Set<number>;
   onSelect?: (node: GraphNode) => void;
 }): JSX.Element {
+  // Honour the OS-level preference rather than animating regardless.
+  const reduceMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hovered, setHovered] = useState<GraphNode | null>(null);
   // Bumped by the ResizeObserver to re-run the layout effect once the container
   // actually has a size.
   const [tick, setTick] = useState(0);
+  /** Hovered node id, in a ref so the draw loop reads it without re-running
+   *  the whole layout effect on every mouse move. */
+  const hoverRef = useRef<number | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -79,6 +86,42 @@ export function ForceGraph({
     canvas.style.height = `${height}px`;
     const ctx = canvas.getContext('2d')!;
     ctx.scale(dpr, dpr);
+
+    // Ancestry index: for any node, the set on its shortest path back to the
+    // compromised root. Hovering a node lights that chain and dims everything
+    // else, which is how you actually read a 300-node graph.
+    const parentOf = new Map<number, number>();
+    {
+      const adjacency = new Map<number, number[]>();
+      for (const link of links) {
+        const list = adjacency.get(link.source) ?? [];
+        list.push(link.target);
+        adjacency.set(link.source, list);
+        const back = adjacency.get(link.target) ?? [];
+        back.push(link.source);
+        adjacency.set(link.target, back);
+      }
+      const queue = [sourceId];
+      const seen = new Set([sourceId]);
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        for (const next of adjacency.get(current) ?? []) {
+          if (seen.has(next)) continue;
+          seen.add(next);
+          parentOf.set(next, current);
+          queue.push(next);
+        }
+      }
+    }
+    const ancestryOf = (id: number): Set<number> => {
+      const chain = new Set<number>([id]);
+      let cursor = id;
+      for (let i = 0; i < 64 && parentOf.has(cursor); i++) {
+        cursor = parentOf.get(cursor)!;
+        chain.add(cursor);
+      }
+      return chain;
+    };
 
     const simNodes: SimNode[] = nodes.map((node) => ({ ...node }));
     const byId = new Map(simNodes.map((node) => [node.id, node]));
@@ -110,16 +153,45 @@ export function ForceGraph({
       .force('x', forceX<SimNode>(width / 2).strength(0.02))
       .force('y', forceY<SimNode>(height / 2).strength(0.02));
 
+    // Shockwave: a ring that expands from the compromised node once, on load.
+    // It reads as the blast propagating outward, and it is the one moment in
+    // the UI that earns an animation.
+    const shockStart = performance.now();
+    const SHOCK_MS = 1500;
+
     const draw = () => {
       ctx.clearRect(0, 0, width, height);
+
+      const focus = hoverRef.current;
+      const lit = focus !== null ? ancestryOf(focus) : null;
+
+      if (!reduceMotion && source?.x !== undefined) {
+        const t = (performance.now() - shockStart) / SHOCK_MS;
+        if (t < 1) {
+          const eased = 1 - Math.pow(1 - t, 3);
+          ctx.beginPath();
+          ctx.arc(source.x, source.y!, eased * Math.max(width, height) * 0.55, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(255,92,108,${(1 - t) * 0.5})`;
+          ctx.lineWidth = 2.5 * (1 - t) + 0.5;
+          ctx.stroke();
+        }
+      }
 
       ctx.lineWidth = 1;
       for (const link of simLinks) {
         const a = link.source as SimNode;
         const b = link.target as SimNode;
         if (a.x === undefined || b.x === undefined) continue;
-        const lit = highlight?.has(a.id) && highlight?.has(b.id);
-        ctx.strokeStyle = lit ? 'rgba(255,92,108,0.55)' : 'rgba(70,81,107,0.35)';
+        const onChain = lit ? lit.has(a.id) && lit.has(b.id) : false;
+        const highlighted = highlight?.has(a.id) && highlight?.has(b.id);
+        ctx.strokeStyle = onChain
+          ? 'rgba(255,180,84,0.85)'
+          : lit
+            ? 'rgba(70,81,107,0.12)'
+            : highlighted
+              ? 'rgba(255,92,108,0.55)'
+              : 'rgba(70,81,107,0.35)';
+        ctx.lineWidth = onChain ? 2 : 1;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y!);
         ctx.lineTo(b.x, b.y!);
@@ -129,10 +201,14 @@ export function ForceGraph({
       for (const node of simNodes) {
         if (node.x === undefined) continue;
         const isSource = node.id === sourceId;
-        const lit = highlight?.has(node.id);
+        const onChain = lit ? lit.has(node.id) : false;
+        const dimmed = lit !== null && !onChain;
+        const isHighlighted = highlight?.has(node.id);
         const radius = isSource ? 11 : node.label === 'Repo' ? 7 : 4.5;
 
-        if (isSource || lit) {
+        ctx.globalAlpha = dimmed ? 0.18 : 1;
+
+        if (isSource || isHighlighted) {
           ctx.beginPath();
           ctx.arc(node.x, node.y!, radius + 6, 0, Math.PI * 2);
           ctx.fillStyle = isSource ? 'rgba(255,92,108,0.22)' : 'rgba(255,92,108,0.12)';
@@ -140,17 +216,35 @@ export function ForceGraph({
         }
 
         ctx.beginPath();
-        ctx.arc(node.x, node.y!, radius, 0, Math.PI * 2);
-        ctx.fillStyle = isSource ? '#ff5c6c' : lit ? '#ff8a95' : COLORS[node.label];
+        ctx.arc(node.x, node.y!, onChain && !isSource ? radius + 1.5 : radius, 0, Math.PI * 2);
+        ctx.fillStyle = isSource
+          ? '#ff5c6c'
+          : onChain
+            ? '#ffb454'
+            : isHighlighted
+              ? '#ff8a95'
+              : COLORS[node.label];
         ctx.fill();
 
-        if (node.label === 'Repo' || isSource) {
+        if (node.label === 'Repo' || isSource || onChain) {
           ctx.fillStyle = isSource ? '#ffdfe2' : '#9fb0cc';
           ctx.font = `${isSource ? 12 : 11}px ui-monospace, monospace`;
           ctx.fillText(node.name, node.x + radius + 5, node.y! + 3.5);
         }
+        ctx.globalAlpha = 1;
       }
     };
+
+    // The shockwave and hover state both need frames the simulation may not
+    // produce once it cools, so drive them independently.
+    let raf = 0;
+    const animate = () => {
+      draw();
+      if (performance.now() - shockStart < SHOCK_MS + 100 || hoverRef.current !== null) {
+        raf = requestAnimationFrame(animate);
+      }
+    };
+    raf = requestAnimationFrame(animate);
 
     simulation.on('tick', draw);
 
@@ -168,8 +262,14 @@ export function ForceGraph({
           break;
         }
       }
+      const changed = hoverRef.current !== (found?.id ?? null);
+      hoverRef.current = found?.id ?? null;
       setHovered(found);
       canvas.style.cursor = found ? 'pointer' : 'default';
+      if (changed) {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(animate);
+      }
     };
 
     const handleClick = (event: MouseEvent) => {
@@ -193,9 +293,10 @@ export function ForceGraph({
     return () => {
       canvas.removeEventListener('mousemove', handleMove);
       canvas.removeEventListener('click', handleClick);
+      cancelAnimationFrame(raf);
       simulation.stop();
     };
-  }, [nodes, links, sourceId, highlight, onSelect, tick]);
+  }, [nodes, links, sourceId, highlight, onSelect, tick, reduceMotion]);
 
   return (
     <div className="graph-wrap">
@@ -235,6 +336,9 @@ export function ForceGraph({
         >
           <div style={{ color: '#dbe2f0' }}>{hovered.name}</div>
           <div style={{ color: '#8b97b0' }}>{hovered.label}</div>
+          <div style={{ color: '#ffb454', marginTop: 4, fontSize: 11 }}>
+            path to the compromised package highlighted
+          </div>
         </div>
       )}
     </div>

@@ -19,6 +19,11 @@ import {
   maintainerWeb,
   markCompromised,
   planRemediation,
+  preflight,
+  prioritiseExposure,
+  advisories as advisoriesQuery,
+  explainPath,
+  maintainerBlastRadius,
   readSnapshot,
   snapshotExists,
   SCENARIOS,
@@ -145,14 +150,38 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
         res.json([]);
         return;
       }
-      // HydraDB's WHERE supports STARTS WITH, which is exactly a prefix search.
-      const result = await client.query(
-        'MATCH (p:Package) WHERE p.key STARTS WITH $prefix ' +
-          'RETURN p.key AS key, p.name AS name, p.dependent_count AS dependent_count, ' +
-          'p.downloads AS downloads ORDER BY dependent_count DESC LIMIT 25',
-        { parameters: { prefix: query } },
+      // HydraDB's WHERE supports STARTS WITH, which is exactly a prefix search
+      // — but package keys are ecosystem-qualified (`npm:express`) and people
+      // type the bare name. There is no CONTAINS to fall back on, so both
+      // prefixes are tried and merged; each is still an indexed prefix scan.
+      const prefixes = [query];
+      for (const ecosystem of ['npm:', 'pypi:']) {
+        if (!query.startsWith(ecosystem)) prefixes.push(`${ecosystem}${query}`);
+      }
+
+      const results = await Promise.all(
+        prefixes.map((prefix) =>
+          client.query(
+            'MATCH (p:Package) WHERE p.key STARTS WITH $prefix ' +
+              'RETURN p.key AS key, p.name AS name, p.dependent_count AS dependent_count, ' +
+              'p.downloads AS downloads ORDER BY dependent_count DESC LIMIT 25',
+            { parameters: { prefix } },
+          ),
+        ),
       );
-      res.json(result.records);
+
+      const merged = new Map<string, Record<string, unknown>>();
+      for (const result of results) {
+        for (const record of result.records) {
+          const key = String(record.key ?? '');
+          if (key && !merged.has(key)) merged.set(key, record);
+        }
+      }
+      res.json(
+        [...merged.values()]
+          .sort((a, b) => Number(b.dependent_count ?? 0) - Number(a.dependent_count ?? 0))
+          .slice(0, 25),
+      );
     }),
   );
 
@@ -363,6 +392,161 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
           lowDownloadThreshold: config.typosquat.lowDownloadThreshold,
         }),
       );
+    }),
+  );
+
+  // --- the Cypher console ---------------------------------------------------
+
+  /**
+   * Run an arbitrary read query against HydraDB.
+   *
+   * This exists so the dashboard can *show* the engine working rather than
+   * assert it. Writes are refused: the console is a window into the graph, not
+   * a way to mutate it from a browser tab.
+   */
+  app.post(
+    '/api/cypher',
+    handle(async (req, res) => {
+      const body = req.body as { query?: string; consistency?: 'causal' | 'strong' };
+      const query = String(body.query ?? '').trim();
+      if (!query) {
+        res.status(400).json({ error: 'query is required' });
+        return;
+      }
+
+      const mutating = /\b(CREATE|MERGE|DELETE|SET|REMOVE|DETACH)\b/i.test(query);
+      if (mutating) {
+        res.status(400).json({
+          error:
+            'the console is read-only. Mutations are available through the CLI ' +
+            '(blastradius mark-compromised, load, scan).',
+        });
+        return;
+      }
+
+      const started = Date.now();
+      try {
+        const result = await client.query(query, {
+          consistency: body.consistency ?? config.traversal.readConsistency,
+          retries: 0,
+        });
+        // Paths are large; summarise them so one bad query cannot wedge the tab.
+        const rows = result.records.slice(0, 200).map((record) => {
+          const out: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(record)) {
+            if (value && typeof value === 'object' && 'nodes' in value) {
+              const path = value as { nodes: Array<{ properties: Record<string, unknown> }> };
+              out[key] = `path(${path.nodes.length} nodes): ${path.nodes
+                .map((n) => String(n.properties.key ?? n.properties.name ?? '?'))
+                .join(' → ')}`;
+            } else {
+              out[key] = value;
+            }
+          }
+          return out;
+        });
+        res.json({
+          columns: result.columns,
+          rows,
+          rowCount: result.records.length,
+          truncated: result.records.length > rows.length,
+          elapsedMs: result.elapsedMs,
+          wallMs: Date.now() - started,
+          readEpoch: result.readEpoch,
+          consistency: body.consistency ?? config.traversal.readConsistency,
+        });
+      } catch (error) {
+        // A rejected query is a *result* here, not a server failure — the whole
+        // point of the console is to see what the engine accepts.
+        res.status(200).json({
+          columns: [],
+          rows: [],
+          rowCount: 0,
+          truncated: false,
+          elapsedMs: 0,
+          wallMs: Date.now() - started,
+          queryError: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }),
+  );
+
+  /** The engine's own metrics, for the live panel. */
+  app.get(
+    '/api/engine',
+    handle(async (_req, res) => {
+      const text = await fetch(`${config.hydra.adminUrl.replace(/\/$/, '')}/metrics`, {
+        signal: AbortSignal.timeout(5000),
+      }).then((r) => r.text());
+
+      const metric = (name: string): number | null => {
+        const match = new RegExp(`^${name}(?:\\{[^}]*\\})?\\s+([0-9.eE+-]+)$`, 'm').exec(text);
+        return match?.[1] ? Number(match[1]) : null;
+      };
+
+      res.json({
+        ready: metric('graph_runtime_ready'),
+        queriesIssued: client.queryCount,
+        totalQueryMs: Math.round(client.totalQueryMs),
+        bolt: config.hydra.boltUrl,
+        http: config.hydra.httpUrl,
+        raw: text
+          .split('\n')
+          .filter((line) => line && !line.startsWith('#'))
+          .slice(0, 40),
+      });
+    }),
+  );
+
+  // --- insights -------------------------------------------------------------
+
+  app.get(
+    '/api/prioritise',
+    handle(async (req, res) => {
+      const version = await findVersion(client, String(req.query.version ?? ''));
+      if (!version) {
+        res.status(404).json({ error: `version not found: ${String(req.query.version)}` });
+        return;
+      }
+      res.json(await prioritiseExposure(client, version, { ...traversal(), consistency: consistencyFor(req) }));
+    }),
+  );
+
+  app.get(
+    '/api/preflight',
+    handle(async (req, res) => {
+      const limit = req.query.limit ? Number(req.query.limit) : 10;
+      res.json(await preflight(client, { ...traversal(), limit }));
+    }),
+  );
+
+  app.get(
+    '/api/advisories',
+    handle(async (_req, res) => {
+      res.json(await advisoriesQuery(client));
+    }),
+  );
+
+  app.get(
+    '/api/why',
+    handle(async (req, res) => {
+      const repoKey = String(req.query.repo ?? '');
+      const versionKey = String(req.query.version ?? '');
+      res.json(
+        await explainPath(
+          client,
+          repoKey.includes('/') ? repoKey : `${config.org.name}/${repoKey}`,
+          versionKey,
+          traversal(),
+        ),
+      );
+    }),
+  );
+
+  app.get(
+    '/api/maintainer-radius',
+    handle(async (req, res) => {
+      res.json(await maintainerBlastRadius(client, String(req.query.username ?? ''), traversal()));
     }),
   );
 

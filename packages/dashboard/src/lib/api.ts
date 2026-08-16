@@ -201,6 +201,63 @@ export interface ScenarioSummary {
   to: number;
 }
 
+export interface CypherResult {
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  rowCount: number;
+  truncated: boolean;
+  elapsedMs: number;
+  wallMs: number;
+  readEpoch?: number | null;
+  consistency?: string;
+  queryError?: string;
+}
+
+export interface PrioritisedReport {
+  source: VersionRef;
+  ranked: Array<ExposedRepo & {
+    priority: number;
+    factors: { severity: number; proximity: number; directness: number; reach: number };
+    advisoryId: string;
+    advisorySeverity: string;
+  }>;
+  advisoryId: string;
+  advisorySeverity: string;
+  elapsedMs: number;
+}
+
+export interface PreflightReport {
+  entries: Array<{
+    packageKey: string; packageName: string; versionKey: string;
+    exposedRepos: number; maxDepth: number; downloads: number; maintainers: number; damage: number;
+  }>;
+  candidatesTested: number;
+  elapsedMs: number;
+}
+
+export interface AdvisoryView {
+  id: string; packageKey: string; summary: string; severity: string;
+  published: number; affectedCount: number; exposedRepos: string[];
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    let message = text.slice(0, 300);
+    try {
+      const parsed = JSON.parse(text) as { error?: string };
+      if (parsed.error) message = parsed.error;
+    } catch { /* keep raw */ }
+    throw new Error(message);
+  }
+  return JSON.parse(text) as T;
+}
+
 async function get<T>(path: string): Promise<T> {
   const response = await fetch(path);
   const text = await response.text();
@@ -251,6 +308,17 @@ export const api = {
     get<MaintainerReport>(`/api/maintainers?package=${encodeURIComponent(packageKey)}`),
   remediation: (versionKey: string) =>
     get<RemediationPlan>(`/api/remediation?version=${encodeURIComponent(versionKey)}`),
+  cypher: (query: string, consistency: 'causal' | 'strong' = 'causal') =>
+    post<CypherResult>('/api/cypher', { query, consistency }),
+  prioritise: (versionKey: string) =>
+    get<PrioritisedReport>(`/api/prioritise?version=${encodeURIComponent(versionKey)}`),
+  preflight: (limit = 10) => get<PreflightReport>(`/api/preflight?limit=${limit}`),
+  advisories: () =>
+    get<{ advisories: AdvisoryView[]; elapsedMs: number }>('/api/advisories'),
+  engine: () =>
+    get<{ ready: number | null; queriesIssued: number; totalQueryMs: number; bolt: string; http: string }>(
+      '/api/engine',
+    ),
   typosquats: () =>
     get<{ findings: TyposquatFinding[]; elapsedMs: number; cypher: string }>('/api/typosquats'),
 };

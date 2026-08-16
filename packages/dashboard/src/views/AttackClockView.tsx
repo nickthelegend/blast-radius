@@ -4,7 +4,7 @@ import { ForceGraph } from '../components/ForceGraph.js';
 import { api, fmtMs, type GraphResponse, type ScenarioSummary } from '../lib/api.js';
 
 interface SimEvent {
-  type: 'start' | 'publish' | 'measure' | 'done' | 'error';
+  type: 'preparing' | 'start' | 'publish' | 'measure' | 'done' | 'error';
   [key: string]: unknown;
 }
 
@@ -65,6 +65,10 @@ export function AttackClockView({
 
     source.onmessage = (message) => {
       const event = JSON.parse(message.data as string) as SimEvent;
+
+      if (event.type === 'preparing') {
+        append(`PREPARING  resolving the seed and propagation surface…`);
+      }
 
       if (event.type === 'start') {
         const seed = (event.seed as { key: string }).key;
@@ -189,7 +193,11 @@ export function AttackClockView({
                 {line}
               </div>
             ))}
-            {lines.length === 0 && <div className="muted">press “run incident” to begin</div>}
+            {lines.length === 0 && (
+              <div className="muted">
+                {running ? 'connecting…' : 'press “run incident” to begin'}
+              </div>
+            )}
           </div>
         </div>
 

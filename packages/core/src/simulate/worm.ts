@@ -45,6 +45,9 @@ export type SimulationEvent =
       compromisedVersionCount: number;
     }
   | { type: 'done'; report: BlastRadiusReport; elapsedMs: number; compromisedVersionKeys: string[] }
+  /** Emitted the instant the run begins, before any graph work, so the UI is
+   *  never silent while the seed and propagation surface are resolved. */
+  | { type: 'preparing'; scenario: string }
   | { type: 'error'; message: string };
 
 export interface SimulationOptions {
@@ -135,16 +138,33 @@ async function propagationTargets(
     .slice(0, limit);
 
   // Resolve each to the version an attacker would publish over: the newest one.
+  //
+  // One query for the whole set, not one per package. HydraDB has no `IN`, so
+  // the obvious shape is a lookup per candidate — and with 42 candidates that
+  // is 42 sequential round trips *before the first event reaches the UI*,
+  // leaving the operator staring at an idle screen for the better part of
+  // twenty seconds after pressing "run". Reading every version once and
+  // grouping in memory keeps it to a single paginated call.
+  const wanted = new Map(ranked);
+  const newest = new Map<string, { key: string; publishedAt: number }>();
+  const allVersions = await client.query(
+    'MATCH (v:Version) RETURN v.key AS key, v.package_key AS package_key, ' +
+      'v.published_at AS published_at',
+  );
+  for (const record of allVersions.records) {
+    const packageKey = typeof record.package_key === 'string' ? record.package_key : '';
+    if (!wanted.has(packageKey)) continue;
+    const key = typeof record.key === 'string' ? record.key : '';
+    const publishedAt = typeof record.published_at === 'number' ? record.published_at : 0;
+    const current = newest.get(packageKey);
+    if (!current || publishedAt > current.publishedAt) newest.set(packageKey, { key, publishedAt });
+  }
+
   const targets: Array<{ versionKey: string; packageName: string; maintainer: string }> = [];
   for (const [packageKey, info] of ranked) {
-    const versions = await client.query(
-      'MATCH (v:Version) WHERE v.package_key = $package_key ' +
-        'RETURN v.key AS key, v.published_at AS published_at ORDER BY published_at DESC LIMIT 1',
-      { parameters: { package_key: packageKey } },
-    );
-    const versionKey = versions.records[0]?.key;
-    if (typeof versionKey !== 'string') continue;
-    targets.push({ versionKey, packageName: info.name, maintainer: info.maintainer });
+    const pick = newest.get(packageKey);
+    if (!pick?.key) continue;
+    targets.push({ versionKey: pick.key, packageName: info.name, maintainer: info.maintainer });
   }
 
   return targets;
@@ -158,6 +178,8 @@ export async function* simulate(
   const now = options.now ?? Date.now();
   const windowFrom = scenario.from(now);
   const windowTo = scenario.to(now);
+
+  yield { type: 'preparing', scenario: scenario.title };
 
   // Read the existing markings *before* clearing them: they name the incident
   // this dataset was generated around, and that is the best default seed.

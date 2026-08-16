@@ -178,6 +178,7 @@ program
   .option('--repo <name>', 'scope the gate to one repository')
   .option('--fail-on <n>', 'number of exposures that constitutes a failure', '1')
   .option('--max-depth <n>', 'maximum dependency-chain depth')
+  .option('--since <instant>', 'gate only on exposure introduced after this instant')
   .option('--sarif <file>', 'also write SARIF 2.1.0 for GitHub code scanning')
   .option('--format <format>', 'output format: text (default) or markdown for a PR comment')
   .option('--json', 'emit JSON')

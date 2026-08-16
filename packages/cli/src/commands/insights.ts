@@ -17,7 +17,7 @@ import {
   timeMachine,
 } from '@blast/core';
 
-import { createContext, fail, requireVersion } from '../context.js';
+import { createContext, fail, parseInstant, requireVersion } from '../context.js';
 import { bar, bold, cyan, dim, duration, green, iso, pad, red, yellow } from '../format.js';
 
 const traversalFrom = (config: ReturnType<typeof createContext>['config'], depth?: string) => ({
@@ -343,7 +343,20 @@ export async function ciCommand(options: {
   const traversal = traversalFrom(config, options.maxDepth);
 
   const compromised = await listCompromisedVersions(client);
-  const findings: Array<{ version: string; repo: string; depth: number; chain: string }> = [];
+  const findings: Array<{
+    version: string;
+    repo: string;
+    depth: number;
+    chain: string;
+    capturedAt: number;
+  }> = [];
+
+  // `--since` gates on *new* exposure only. A repository that is already
+  // exposed otherwise fails every build forever, which trains everyone to
+  // ignore the gate — the failure mode that makes a CI check worthless. With a
+  // cutoff, the gate fails on the lockfile that introduced the exposure and
+  // stays quiet about the backlog.
+  const since = options.since ? parseInstant(options.since, '--since') : null;
 
   for (const version of compromised) {
     const report = await blastRadius(client, version, traversal);
@@ -351,11 +364,13 @@ export async function ciCommand(options: {
       if (options.repo && exposure.repoName !== options.repo && exposure.repoKey !== options.repo) {
         continue;
       }
+      if (since !== null && exposure.snapshotCapturedAt < since) continue;
       findings.push({
         version: version.key,
         repo: exposure.repoName,
         depth: exposure.depth,
         chain: exposure.chainText,
+        capturedAt: exposure.snapshotCapturedAt,
       });
     }
   }
@@ -403,7 +418,9 @@ export async function ciCommand(options: {
   } else {
     out.write(`${bold('BLAST RADIUS CI GATE')}\n`);
     out.write(dim(`  ${compromised.length} compromised version(s) checked`));
-    out.write(options.repo ? dim(` · scoped to ${options.repo}\n`) : '\n');
+    out.write(options.repo ? dim(` · scoped to ${options.repo}`) : '');
+    out.write(since !== null ? dim(` · only exposure since ${iso(since)}`) : '');
+    out.write('\n');
     if (findings.length === 0) {
       out.write(`\n  ${green('PASS')} — nothing exposed\n`);
     } else {

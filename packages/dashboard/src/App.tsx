@@ -183,7 +183,8 @@ export function App(): JSX.Element {
           lists its sheets rather than crowding them into the title. */}
       <header className="top">
         <div className="title-block">
-          <h1>
+          {/* Printed beside the wordmark so a paper copy says where it came from. */}
+          <h1 data-print-url={`${window.location.origin}${window.location.search}`}>
             BLAST <span>RADIUS</span>
           </h1>
           <div className="imprint">

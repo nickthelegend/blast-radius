@@ -1225,3 +1225,95 @@ tbody tr.row-selected td:first-child { color: var(--ink); }
 .band.clear { font-family: var(--cond); letter-spacing: 0.09em; text-transform: uppercase; }
 
 @media (max-width: 640px) { .band-strip { display: none; } }
+
+/* =============================================================================
+   Print
+
+   The world is a survey sheet, so it should come off a printer as one. This is
+   not a novelty: an incident write-up gets pasted into a document or handed to
+   someone who was not at the screen, and a dark dashboard screenshotted into a
+   report is unreadable.
+
+   Ink is inverted to paper, the chrome that only makes sense on screen is
+   dropped, and the plotted canvas is kept — it is the evidence.
+   ========================================================================== */
+
+@media print {
+  :root {
+    --ground: #ffffff;
+    --sheet: #ffffff;
+    --sheet-2: #f4f2ee;
+    --well: #ffffff;
+    --rule: #c8c2b8;
+    --rule-lit: #8c8478;
+    --ink: #14120f;
+    --ink-2: #3d382f;
+    --ink-3: #5c554a;
+    --graphite: #6f665a;
+    --blast: #a8321a;
+    --buff: #7a5410;
+    --clear: #3c5c1f;
+    --survey: #2c4d5e;
+  }
+
+  body {
+    background: #fff;
+    color: #14120f;
+    font-size: 10.5pt;
+  }
+
+  .app { height: auto; display: block; }
+  main { overflow: visible; padding: 0; }
+
+  /* Navigation, search and controls mean nothing on paper. */
+  nav.tabs,
+  .band-strip,
+  .graph-reset,
+  .palette-backdrop,
+  button.action,
+  .preset,
+  .copyable,
+  input[type='range'],
+  .verdict-key,
+  select { display: none !important; }
+
+  /* The title block becomes the document header, printed once. */
+  header.top {
+    box-shadow: none;
+    border-bottom: 1.5pt solid #14120f;
+    break-inside: avoid;
+  }
+  .title-block { padding: 0 0 8pt; }
+
+  /* Sheets become sections that do not break across a page mid-table. */
+  .panel {
+    border: 0.5pt solid #c8c2b8;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 10pt;
+  }
+  .grid-2 { display: block; }
+  .grid-2 > * { margin-bottom: 10pt; }
+
+  /* A table that splits across pages repeats its header. */
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; }
+  thead th { position: static; background: #fff; }
+
+  .graph-wrap { height: 320pt; break-inside: avoid; }
+  .graph-wrap::before, .graph-wrap::after { display: none; }
+  .log { height: auto; max-height: none; }
+
+  /* Provenance is the point of the document, so it prints. */
+  .conditions { border-top: 0.5pt solid #c8c2b8; }
+
+  /* A URL the reader can go back to. */
+  header.top h1::after {
+    content: ' · ' attr(data-print-url);
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: #5c554a;
+  }
+
+  * { animation: none !important; transition: none !important; }
+}

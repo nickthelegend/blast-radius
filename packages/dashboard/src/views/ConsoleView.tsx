@@ -32,7 +32,7 @@ const PRESETS: Preset[] = [
     label: 'Time Machine window',
     note: 'the query a flat scanner cannot express — inclusive integer range over captured_at',
     query: `MATCH (s:LockfileSnapshot)-[r:RESOLVED]->(v:Version {id: $SEED_ID})
-WHERE s.captured_at >= 1786604400000 AND s.captured_at <= 1786604760000
+WHERE s.captured_at >= $WINDOW_FROM AND s.captured_at <= $WINDOW_TO
 RETURN s.repo_name AS repo, s.captured_at AS captured, s.is_current AS still_current
 ORDER BY captured`,
   },
@@ -84,6 +84,9 @@ export function ConsoleView({
   const [consistency, setConsistency] = useState<'causal' | 'strong'>('causal');
   const [seedId, setSeedId] = useState<number | null>(null);
   const [packageId, setPackageId] = useState<number | null>(null);
+  /** The selected version's own compromise window, so the Time Machine preset
+   *  cannot drift away from the data the way a hardcoded pair of epochs did. */
+  const [window, setWindow] = useState<{ from: number; to: number } | null>(null);
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Resolve the ids the presets reference, so a preset is runnable as-is.
@@ -96,6 +99,18 @@ export function ConsoleView({
       .then((r) => {
         const id = r.rows[0]?.id;
         if (typeof id === 'number') setSeedId(id);
+      })
+      .catch(() => undefined);
+
+    api
+      .cypher(
+        `MATCH (v:Version) WHERE v.key = '${seedVersionKey.replace(/'/g, "\\'")}' ` +
+          'RETURN v.compromised_from AS f, v.compromised_to AS t LIMIT 1',
+      )
+      .then((r) => {
+        const f = r.rows[0]?.f;
+        const t = r.rows[0]?.t;
+        if (typeof f === 'number' && typeof t === 'number' && f > 0) setWindow({ from: f, to: t });
       })
       .catch(() => undefined);
 
@@ -117,8 +132,10 @@ export function ConsoleView({
     (text: string) =>
       text
         .replace(/\$SEED_ID/g, seedId === null ? '0' : String(seedId))
-        .replace(/\$PACKAGE_ID/g, packageId === null ? '0' : String(packageId)),
-    [seedId, packageId],
+        .replace(/\$PACKAGE_ID/g, packageId === null ? '0' : String(packageId))
+        .replace(/\$WINDOW_FROM/g, window === null ? '0' : String(window.from))
+        .replace(/\$WINDOW_TO/g, window === null ? '0' : String(window.to)),
+    [seedId, packageId, window],
   );
 
   const run = useCallback(async () => {
@@ -154,8 +171,9 @@ export function ConsoleView({
         <h2>Cypher console</h2>
         <p className="sub">
           Every number in this dashboard comes from a query like these. Run them yourself —{' '}
-          <span className="mono">$SEED_ID</span> and <span className="mono">$PACKAGE_ID</span> are
-          substituted for the selected package. Read-only: the server refuses mutations.
+          <span className="mono">$SEED_ID</span>, <span className="mono">$PACKAGE_ID</span>,{' '}
+          <span className="mono">$WINDOW_FROM</span> and <span className="mono">$WINDOW_TO</span>{' '}
+          are substituted from the selected version. Read-only: the server refuses mutations.
         </p>
 
         <div className="row" style={{ marginBottom: 10, gap: 6 }}>

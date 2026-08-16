@@ -209,13 +209,16 @@ export function App(): JSX.Element {
                 query
               </button>
               {stats && stats.compromised.length > 0 && (
-                <span className="muted" >
-                  marked compromised:{' '}
+                /* A wrapping flex row, not inline-with-margins. Inline pills
+                   plus a trailing "+N more" overlapped once the list wrapped at
+                   narrow widths, painting the count under the last pill. */
+                <div className="marked-row">
+                  <span className="muted">marked compromised:</span>
                   {stats.compromised.slice(0, 6).map((version) => (
                     <button
                       key={version.key}
                       className="pill danger"
-                      style={{ cursor: 'pointer', marginRight: 6 }}
+                      style={{ cursor: 'pointer' }}
                       onClick={() => {
                         setVersionKey(version.key);
                         setInput(version.key);
@@ -225,9 +228,9 @@ export function App(): JSX.Element {
                     </button>
                   ))}
                   {stats.compromised.length > 6 && (
-                    <span className="muted"> +{stats.compromised.length - 6} more</span>
+                    <span className="muted">+{stats.compromised.length - 6} more</span>
                   )}
-                </span>
+                </div>
               )}
             </div>
           </div>

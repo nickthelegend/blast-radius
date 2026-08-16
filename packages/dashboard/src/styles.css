@@ -1104,3 +1104,21 @@ main, .panel, .grid-2 > *, .row > * { min-width: 0; }
   color: var(--buff);
   pointer-events: none;
 }
+
+/* An isolated row. Marked by the reference ink and a rule on the leading edge,
+   the way a chart marks the row a callout refers to. */
+tbody tr.row-selected {
+  background: var(--sheet-2);
+  box-shadow: inset 2px 0 0 var(--survey);
+}
+tbody tr.row-selected td:first-child { color: var(--ink); }
+
+/* The compromised-version picker. Wraps as a row of discrete marks rather than
+   as inline text, so the trailing count can never land under a pill. */
+.marked-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}

@@ -76,6 +76,8 @@ export interface BlastRadiusReport {
   truncated: boolean;
   elapsedMs: number;
   consistency: string;
+  /** The snapshot this traversal was pinned to. */
+  readEpoch: number | null;
   procedure: 'algo.SSpaths' | 'algo.MSpaths';
   cypher: string;
 }
@@ -223,6 +225,7 @@ function buildReport(
     consistency: string;
     procedure: BlastRadiusReport['procedure'];
     cypher: string;
+    readEpoch: number | null;
   },
 ): BlastRadiusReport {
   const packages = new Map<string, ExposedPackage>();
@@ -309,6 +312,7 @@ function buildReport(
     consistency: meta.consistency,
     procedure: meta.procedure,
     cypher: meta.cypher,
+    readEpoch: meta.readEpoch,
   };
 }
 
@@ -328,7 +332,13 @@ async function runPathProcedure(
   build: (pathCount: number, resultLimit: number) => string,
   options: BlastRadiusOptions,
   onDegrade?: (pathCount: number, reason: string) => void,
-): Promise<{ cypher: string; records: Array<Record<string, unknown>>; elapsedMs: number; pathCount: number }> {
+): Promise<{
+  cypher: string;
+  records: Array<Record<string, unknown>>;
+  elapsedMs: number;
+  pathCount: number;
+  readEpoch: number | null;
+}> {
   let pathCount = options.pathCount;
   let resultLimit = options.resultLimit;
 
@@ -336,7 +346,13 @@ async function runPathProcedure(
     const cypher = build(pathCount, resultLimit);
     try {
       const result = await client.query(cypher, { consistency: options.consistency, retries: 0 });
-      return { cypher, records: result.records, elapsedMs: result.elapsedMs, pathCount };
+      return {
+        cypher,
+        records: result.records,
+        elapsedMs: result.elapsedMs,
+        pathCount,
+        readEpoch: result.readEpoch,
+      };
     } catch (error) {
       const isBufferLimit =
         error instanceof HydraError &&
@@ -383,6 +399,7 @@ export async function blastRadius(
   return buildReport(source, extractPaths(result.records), pins, { ...options, pathCount: result.pathCount }, {
     elapsedMs: result.elapsedMs,
     consistency: options.consistency ?? 'causal',
+    readEpoch: result.readEpoch,
     procedure: 'algo.SSpaths',
     cypher: result.cypher,
   });
@@ -440,6 +457,7 @@ export async function blastRadiusForRepos(
   return buildReport(source, extractPaths(result.records), pins, { ...options, pathCount: result.pathCount }, {
     elapsedMs: result.elapsedMs,
     consistency: options.consistency ?? 'causal',
+    readEpoch: result.readEpoch,
     procedure: 'algo.MSpaths',
     cypher: result.cypher,
   });

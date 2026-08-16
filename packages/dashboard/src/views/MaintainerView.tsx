@@ -52,7 +52,7 @@ function RadialWeb({ report }: { report: MaintainerReport }): JSX.Element {
             y1={maintainer!.y}
             x2={neighbor.x}
             y2={neighbor.y}
-            stroke={neighbor.isOrgDependency ? 'rgba(255,92,108,0.45)' : 'rgba(70,81,107,0.35)'}
+            stroke={neighbor.isOrgDependency ? 'rgba(255,106,69,0.45)' : 'rgba(111,102,90,0.35)'}
             strokeWidth={1}
           />
         )),

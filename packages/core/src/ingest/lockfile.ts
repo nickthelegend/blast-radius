@@ -21,7 +21,7 @@
  * radius, which is the one failure mode this project cannot have.
  */
 import { readFileSync, statSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 export type LockfileKind =
   | 'package-lock.json'
@@ -55,14 +55,39 @@ export interface ParsedLockfile {
   resolutions: Array<{ from: ParsedEntry; to: ParsedEntry }>;
 }
 
-/** Locate a supported lockfile in a directory. */
-export function findLockfile(dir: string): { file: string; kind: LockfileKind } {
-  const candidates: Array<[string, LockfileKind]> = [
-    ['package-lock.json', 'package-lock.json'],
-    ['npm-shrinkwrap.json', 'package-lock.json'],
-    ['pnpm-lock.yaml', 'pnpm-lock.yaml'],
-    ['yarn.lock', 'yarn.lock'],
-  ];
+const LOCKFILE_CANDIDATES: Array<[string, LockfileKind]> = [
+  ['package-lock.json', 'package-lock.json'],
+  ['npm-shrinkwrap.json', 'package-lock.json'],
+  ['pnpm-lock.yaml', 'pnpm-lock.yaml'],
+  ['yarn.lock', 'yarn.lock'],
+];
+
+/**
+ * Locate a supported lockfile, given either its directory or the file itself.
+ *
+ * A command called `inspect-lockfile` that rejects the path of a lockfile is
+ * asking the reader to know an implementation detail. Both forms resolve here.
+ */
+export function findLockfile(target: string): { file: string; kind: LockfileKind } {
+  const candidates = LOCKFILE_CANDIDATES;
+
+  // Passed the lockfile directly.
+  try {
+    if (statSync(target).isFile()) {
+      const name = basename(target);
+      const match = candidates.find(([filename]) => filename === name);
+      if (match) return { file: target, kind: match[1] };
+      throw new Error(
+        `not a supported lockfile: ${target}\n` +
+          `Supported: ${candidates.map(([filename]) => filename).join(', ')}`,
+      );
+    }
+  } catch (error) {
+    // A missing path falls through to the directory search, which reports it.
+    if (error instanceof Error && error.message.startsWith('not a supported lockfile')) throw error;
+  }
+
+  const dir = target;
   for (const [filename, kind] of candidates) {
     const path = join(dir, filename);
     try {
@@ -78,8 +103,11 @@ export function findLockfile(dir: string): { file: string; kind: LockfileKind } 
   );
 }
 
-export function parseLockfileAt(dir: string): ParsedLockfile {
-  const { file, kind } = findLockfile(dir);
+export function parseLockfileAt(target: string): ParsedLockfile {
+  const { file, kind } = findLockfile(target);
+  // `target` may be the lockfile itself, so the project directory is derived
+  // from the resolved file rather than assumed to be what was passed in.
+  const dir = dirname(resolve(file));
   const capturedAt = statSync(file).mtimeMs;
   const raw = readFileSync(file, 'utf8');
 

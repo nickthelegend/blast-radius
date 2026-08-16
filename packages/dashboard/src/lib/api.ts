@@ -47,6 +47,8 @@ export interface BlastRadiusReport {
   truncated: boolean;
   elapsedMs: number;
   consistency: string;
+  /** The snapshot the traversal was pinned to. */
+  readEpoch: number | null;
   procedure: string;
   cypher: string;
 }
@@ -240,8 +242,27 @@ export interface AdvisoryView {
   published: number; affectedCount: number; exposedRepos: string[];
 }
 
+/**
+ * A request that never reached the server.
+ *
+ * `fetch` rejects with the bare string "Failed to fetch" when the API is not
+ * listening, which the UI then rendered verbatim — telling a reader nothing
+ * about what broke or what to do. This names both.
+ */
+const UNREACHABLE =
+  'Cannot reach the Blast Radius API on this host. The server is not responding — ' +
+  'start it with `make serve`, and check HydraDB is up with `make doctor`.';
+
+async function request(path: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(path, init);
+  } catch {
+    throw new Error(UNREACHABLE);
+  }
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(path, {
+  const response = await request(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -259,7 +280,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const response = await fetch(path);
+  const response = await request(path);
   const text = await response.text();
   if (!response.ok) {
     let message = text.slice(0, 300);

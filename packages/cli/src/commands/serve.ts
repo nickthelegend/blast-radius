@@ -15,6 +15,7 @@ import {
   graphStats,
   listCompromisedVersions,
   listRepos,
+  resolveRepoKeys,
   listVersionsOfPackage,
   maintainerWeb,
   markCompromised,
@@ -110,6 +111,22 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
     const probe = await client.query('MATCH (v:Version) RETURN v.id AS id LIMIT 1');
     return probe.readEpoch ?? null;
   });
+
+  /**
+   * Read a required query parameter, or answer 400 naming it.
+   *
+   * Passing an empty string down produced errors like `version not found: ` and
+   * `repo not found: acme-corp/`, which tell a caller nothing about what the
+   * endpoint wanted. Returns null when it has already answered.
+   */
+  const required = (req: Request, res: Response, name: string): string | null => {
+    const value = String(req.query[name] ?? '').trim();
+    if (!value) {
+      res.status(400).json({ error: `required query parameter: ${name}` });
+      return null;
+    }
+    return value;
+  };
 
   const consistencyFor = (req: Request) =>
     req.query.verified === 'true'
@@ -211,7 +228,8 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   app.get(
     '/api/versions',
     handle(async (req, res) => {
-      const packageKey = String(req.query.package ?? '');
+      const packageKey = required(req, res, 'package');
+      if (packageKey === null) return;
       const versions = await listVersionsOfPackage(client, packageKey);
       res.json({ versions, timeline: buildVersionTimeline(versions) });
     }),
@@ -222,7 +240,8 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   app.get(
     '/api/exposure',
     handle(async (req, res) => {
-      const key = String(req.query.version ?? '');
+      const key = required(req, res, 'version');
+      if (key === null) return;
       const version = await findVersion(client, key);
       if (!version) {
         res.status(404).json({ error: `version not found: ${key}` });
@@ -236,15 +255,35 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
         .filter(Boolean);
 
       const options = { ...traversal(), maxDepth: depth, consistency: consistencyFor(req) };
-      const report =
-        repos.length > 0
-          ? await blastRadiusForRepos(client, version, repos, {
-              ...options,
-              pairwise: req.query.pairwise === 'true',
-            })
-          : await blastRadius(client, version, options);
 
-      res.json(report);
+      if (repos.length === 0) {
+        res.json(await blastRadius(client, version, options));
+        return;
+      }
+
+      // `blastRadiusForRepos` indexes on repo *keys*. Passing the names through
+      // raw matched nothing and returned a cheerful 200 with zero exposure —
+      // silently under-reporting a blast radius, which is the single worst
+      // failure this tool can have. Names and keys are both accepted, and an
+      // unknown repo is an error rather than an empty result.
+      const { resolved, missing } = await resolveRepoKeys(client, repos, config.org.name);
+      if (missing.length > 0) {
+        const available = (await listRepos(client, config.org.name)).map((repo) => repo.name);
+        res.status(404).json({
+          error: `unknown repo${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}`,
+          known: available,
+        });
+        return;
+      }
+
+      res.json(
+        await blastRadiusForRepos(
+          client,
+          version,
+          resolved.map((repo) => repo.key),
+          { ...options, pairwise: req.query.pairwise === 'true' },
+        ),
+      );
     }),
   );
 
@@ -252,7 +291,8 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   app.get(
     '/api/graph',
     handle(async (req, res) => {
-      const key = String(req.query.version ?? '');
+      const key = required(req, res, 'version');
+      if (key === null) return;
       const version = await findVersion(client, key);
       if (!version) {
         res.status(404).json({ error: `version not found: ${key}` });
@@ -327,7 +367,8 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   app.get(
     '/api/time-machine',
     handle(async (req, res) => {
-      const key = String(req.query.version ?? '');
+      const key = required(req, res, 'version');
+      if (key === null) return;
       const version = await findVersion(client, key);
       if (!version) {
         res.status(404).json({ error: `version not found: ${key}` });
@@ -355,7 +396,8 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   app.get(
     '/api/time-machine/as-of',
     handle(async (req, res) => {
-      const key = String(req.query.version ?? '');
+      const key = required(req, res, 'version');
+      if (key === null) return;
       const version = await findVersion(client, key);
       if (!version) {
         res.status(404).json({ error: `version not found: ${key}` });
@@ -374,7 +416,8 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   app.get(
     '/api/remediation',
     handle(async (req, res) => {
-      const key = String(req.query.version ?? '');
+      const key = required(req, res, 'version');
+      if (key === null) return;
       const version = await findVersion(client, key);
       if (!version) {
         res.status(404).json({ error: `version not found: ${key}` });
@@ -391,7 +434,8 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   app.get(
     '/api/maintainers',
     handle(async (req, res) => {
-      const key = String(req.query.package ?? '');
+      const key = required(req, res, 'package');
+      if (key === null) return;
       const pkg = await findPackage(client, key);
       if (!pkg) {
         res.status(404).json({ error: `package not found: ${key}` });
@@ -526,7 +570,9 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   app.get(
     '/api/prioritise',
     handle(async (req, res) => {
-      const version = await findVersion(client, String(req.query.version ?? ''));
+      const versionKeyParam = required(req, res, 'version');
+      if (versionKeyParam === null) return;
+      const version = await findVersion(client, versionKeyParam);
       if (!version) {
         res.status(404).json({ error: `version not found: ${String(req.query.version)}` });
         return;
@@ -553,8 +599,10 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   app.get(
     '/api/why',
     handle(async (req, res) => {
-      const repoKey = String(req.query.repo ?? '');
-      const versionKey = String(req.query.version ?? '');
+      const repoKey = required(req, res, 'repo');
+      if (repoKey === null) return;
+      const versionKey = required(req, res, 'version');
+      if (versionKey === null) return;
       res.json(
         await explainPath(
           client,
@@ -569,7 +617,15 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   app.get(
     '/api/maintainer-radius',
     handle(async (req, res) => {
-      res.json(await maintainerBlastRadius(client, String(req.query.username ?? ''), traversal()));
+      // An omitted or misspelled parameter used to fall through as an empty
+      // string and surface as `no maintainer named ""`, which tells the caller
+      // nothing about what the endpoint actually wants.
+      const username = String(req.query.username ?? '').trim();
+      if (!username) {
+        res.status(400).json({ error: 'required query parameter: username' });
+        return;
+      }
+      res.json(await maintainerBlastRadius(client, username, traversal()));
     }),
   );
 

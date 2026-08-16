@@ -116,6 +116,10 @@ export function BlastRadiusView({
               ['elapsed', fmtMs(report.elapsedMs)],
               ['paths', report.totalPaths.toLocaleString()],
               ['max depth', report.maxDepthUsed],
+              // Toggling "verified read" has to be visible in the result, or the
+              // control is asking the reader to take the change on faith.
+              ['consistency', report.consistency],
+              ['read epoch', report.readEpoch],
             ]}
           />
         )}
@@ -154,10 +158,8 @@ export function BlastRadiusView({
                   <tr
                     key={exposure.repoKey}
                     onClick={() => setSelected(selected === exposure ? null : exposure)}
-                    style={{
-                      cursor: 'pointer',
-                      background: selected === exposure ? 'rgba(77,163,255,0.07)' : undefined,
-                    }}
+                    className={selected === exposure ? 'row-selected' : undefined}
+                    style={{ cursor: 'pointer' }}
                   >
                     <td className="danger mono">{exposure.repoName}</td>
                     <td className="mono">{exposure.depth}</td>

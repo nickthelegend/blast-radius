@@ -40,8 +40,16 @@ export function CommandPalette({
       setQuery('');
       setRemote([]);
       setActive(0);
-      // Focus after paint, or the keystroke that opened it gets swallowed.
-      requestAnimationFrame(() => inputRef.current?.focus());
+      // Focus synchronously: effects run after the DOM is committed, so the
+      // input already exists here. This used to be scheduled in a
+      // requestAnimationFrame callback, which never runs while the page is
+      // hidden or throttled — the palette then opened with focus still on the
+      // body and the first thing typed went nowhere. A zero-delay timer repeats
+      // it on the next macrotask so a browser that defers focus during a
+      // transition still lands it, without depending on a frame being painted.
+      inputRef.current?.focus();
+      const retry = setTimeout(() => inputRef.current?.focus(), 0);
+      return () => clearTimeout(retry);
     }
   }, [open]);
 

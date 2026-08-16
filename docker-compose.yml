@@ -1,13 +1,54 @@
 # HydraDB for local Blast Radius development.
 #
-# A named volume is used rather than a bind mount on purpose: the graph-node
-# image runs as uid 10001, and a host bind mount (especially on macOS, or on any
-# filesystem mounted `noowners`) leaves /data unwritable for that uid, so the
-# node dies with `Os { code: 13, kind: PermissionDenied }` immediately after
-# logging "starting graph node". The init service below fixes ownership and
-# seeds the auth token before graph-node ever starts.
+# Storage is MinIO (S3-compatible), not the local filesystem, and that is not a
+# preference — it is a correctness requirement. SlateDB needs conditional writes
+# (`put_opts` with `PutMode::Update`) to update its manifest, and the
+# object_store LocalFileSystem backend does not implement them:
+#
+#   object store error: Operation `put_opts` with mode `PutMode::Update`
+#   not yet implemented by LocalFileSystem(file:///data/store)
+#
+# With `CLOUD_PROVIDER=local` that surfaces first as failing garbage collection
+# (storage grows, reads slow down), and then as outright HTTP 500s on writes
+# once the manifest needs updating. MinIO implements conditional puts, so the
+# engine behaves the way it does against real S3.
 
 services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    environment:
+      MINIO_ROOT_USER: blastradius
+      MINIO_ROOT_PASSWORD: blastradius-local-secret
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  # Creates the bucket HydraDB writes into. Runs once, then exits.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set local http://minio:9000 blastradius blastradius-local-secret
+        mc mb --ignore-existing local/blast-radius
+        echo "bucket ready"
+
+  # The graph-node image runs as uid 10001, and a fresh named volume is owned by
+  # root — so the cache directory has to be made writable before graph-node
+  # starts, or it dies on `create_dir_all` with PermissionDenied.
   hydradb-init:
     image: ghcr.io/hydra-db/hydradb:latest
     user: "0:0"
@@ -15,14 +56,12 @@ services:
     command:
       - |
         set -e
-        mkdir -p /data/store /data/cache
-        if [ ! -s /data/auth-token ]; then
-          printf '%s\n' "${HYDRA_AUTH_TOKEN:-local-development-token-32-bytes}" > /data/auth-token
-        fi
+        mkdir -p /data/cache
+        printf '%s\n' "local-development-token-32-bytes" > /data/auth-token
         chown -R 10001:10001 /data
-        echo "hydradb volume ready"
+        echo "hydradb cache volume ready"
     volumes:
-      - hydradb-data:/data
+      - hydradb-cache:/data
 
   hydradb:
     image: ghcr.io/hydra-db/hydradb:latest
@@ -31,6 +70,8 @@ services:
     # with a raw Docker name-conflict error. Compose derives a per-project name
     # instead, and `make db-up` checks the ports first.
     depends_on:
+      minio-init:
+        condition: service_completed_successfully
       hydradb-init:
         condition: service_completed_successfully
     ports:
@@ -38,10 +79,18 @@ services:
       - "8443:8443"   # HTTP JSON / NDJSON query API
       - "9090:9090"   # admin: /healthz /readyz /metrics
     volumes:
-      - hydradb-data:/data
+      - hydradb-cache:/data
     environment:
-      CLOUD_PROVIDER: local
-      LOCAL_PATH: /data/store
+      # --- object store: MinIO over the S3 API -----------------------------
+      CLOUD_PROVIDER: aws
+      AWS_BUCKET: blast-radius
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: blastradius
+      AWS_SECRET_ACCESS_KEY: blastradius-local-secret
+      AWS_ALLOW_HTTP: "true"
+
+      # --- graph identity ---------------------------------------------------
       GRAPH_NAMESPACE: default
       GRAPH_ID: default
       GRAPH_CELL_ID: cell-0
@@ -49,30 +98,24 @@ services:
       GRAPH_NODE_ID: node-0
       GRAPH_BOLT_NODE_ADDRESSES: node-0=127.0.0.1:7687
       GRAPH_ADVERTISED_BOLT_ADDR: 127.0.0.1:7687
+
+      # Local scratch only — the durable copy lives in the object store.
       GRAPH_DATA_CACHE_DIR: /data/cache
       GRAPH_AUTH_TOKEN_FILE: /data/auth-token
       GRAPH_ALLOW_PLAINTEXT: "true"
+
       # graph-node recurses deeply while planning; the default 8MB stack aborts.
       RUST_MIN_STACK: "33554432"
-      # Blast Radius traverses up to 10 hops (8 dependency + RESOLVED +
-      # HAS_SNAPSHOT). The engine default is 16, which is comfortably above it.
       GRAPH_MAX_QUERY_RUNTIME_MS: "60000"
       GRAPH_MAX_QUERY_SCAN_EDGES: "50000000"
       # A path procedure returns whole paths, and every node in every path
       # carries its full property map. A wide blast radius is therefore a large
       # response: a thousand paths of ~10 nodes each runs to tens of megabytes,
       # and the 64MB default trips admission control with
-      # "client_cursor_buffer_bytes ... exceeds limit". Raised here because the
-      # traversal is the product; the client also degrades gracefully if a
-      # deployment keeps the lower default.
+      # "client_cursor_buffer_bytes ... exceeds limit".
       GRAPH_MAX_CURSOR_BUFFER_BYTES: "536870912"
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/graph-node", "--version"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
     restart: unless-stopped
 
 volumes:
-  hydradb-data:
+  minio-data:
+  hydradb-cache:

@@ -57,6 +57,10 @@ db-reset: ## destroy and recreate HydraDB storage (fast, total wipe)
 db-logs: ## tail HydraDB logs
 	docker compose logs -f hydradb
 
+.PHONY: db-console
+db-console: ## open the MinIO console (object store behind HydraDB)
+	@echo "MinIO console: http://127.0.0.1:9001  (blastradius / blastradius-local-secret)"
+
 # --- data -------------------------------------------------------------------
 
 .PHONY: ingest

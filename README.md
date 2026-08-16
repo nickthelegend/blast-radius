@@ -62,9 +62,9 @@ search-indexer            no              yes
 
 ## Quick start
 
-Requirements: **Docker**, **Node 20+**. Nothing else — HydraDB runs from the
-published image, and the graph snapshot is committed, so the demo needs no
-network access.
+Requirements: **Docker**, **Node 20+**. Nothing else — HydraDB and its MinIO
+object store both run from published images, and the graph snapshot is
+committed, so the demo needs no network access beyond `npm install`.
 
 ```bash
 git clone <this repo> && cd blast
@@ -619,13 +619,20 @@ to change anything. The ones that matter most:
 | `INGEST_FULL_METADATA_DEPTH` | `0` | Full packuments carry per-version publish times and maintainers but are huge (typescript's is 15MB); only the seeds get one. |
 | `ORG_RANDOM_SEED` | `20260814` | Generation is fully deterministic, so a clean clone reproduces this README's output exactly. |
 
-### Operational note
+### Storage
 
-With `CLOUD_PROVIDER=local`, SlateDB's garbage collector cannot run against the
-local filesystem, so a long-lived instance accumulates storage and reads get
-slower — we measured `stats` degrading to 38s, back to 1.8s after recreating the
-volume. `make db-reset` does that and is what `make demo` uses. For anything
-longer-lived, point `CLOUD_PROVIDER` at MinIO or S3.
+HydraDB runs against **MinIO** (S3-compatible), not the local filesystem, and
+that is a correctness requirement rather than a preference. SlateDB needs
+conditional writes (`put_opts` with `PutMode::Update`) to update its manifest,
+and `object_store`'s LocalFileSystem backend does not implement them — so
+`CLOUD_PROVIDER=local` first fails garbage collection, then slows reads (we
+measured `stats` degrading to 38s), then fails writes outright with HTTP 500.
+
+`docker compose` brings up MinIO alongside HydraDB and creates the bucket, so
+this is handled for you. `make db-console` opens the MinIO web console if you
+want to see the objects. Point `AWS_ENDPOINT` at real S3 and nothing else
+changes. Full detail in
+[`docs/hydradb-findings.md`](docs/hydradb-findings.md#7-cloud_providerlocal-eventually-fails-writes-not-just-garbage-collection).
 
 ---
 

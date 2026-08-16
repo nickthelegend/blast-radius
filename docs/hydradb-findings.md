@@ -166,25 +166,44 @@ smaller answer.
 
 ---
 
-## 7. Local-filesystem storage degrades over a long session
+## 7. `CLOUD_PROVIDER=local` eventually fails writes, not just garbage collection
 
-With `CLOUD_PROVIDER=local`, SlateDB's garbage collector cannot run:
+This one escalated the more we looked at it, and it is the reason Blast Radius
+ships against MinIO rather than the local filesystem.
+
+SlateDB needs **conditional writes** — `put_opts` with `PutMode::Update` — to
+update its manifest. The `object_store` LocalFileSystem backend does not
+implement them:
 
 ```
-error collecting garbage [resource=Manifest, error=ObjectStoreError(
-  NotImplemented { operation: "`put_opts` with mode `PutMode::Update`",
-                   implementer: "LocalFileSystem(file:///data/store)" })]
+object store error: Operation `put_opts` with mode `PutMode::Update`
+not yet implemented by LocalFileSystem(file:///data/store)
 ```
 
-Over a working session this accumulates and reads get progressively slower. On
-one instance, after ~50 failed GC cycles, `blastradius stats` took **38
-seconds**; recreating the storage volume brought the identical query back to
-**1.8 seconds**.
+It shows up in three escalating stages:
 
-**What we did.** `make db-reset` recreates the volume and is what `make demo`
-uses. For anything longer-lived, point `CLOUD_PROVIDER` at MinIO or real S3,
-where the GC works — this is a limitation of the local-filesystem backend, not
-of the engine.
+1. **Garbage collection fails silently.** Every cycle logs
+   `error collecting garbage [resource=Manifest, ...]` and storage accumulates.
+2. **Reads get slower.** After ~50 failed GC cycles on one instance,
+   `blastradius stats` took **38 seconds**; recreating the volume brought the
+   identical query back to **1.8 seconds**.
+3. **Writes start failing outright** with HTTP 500 `internal query execution
+   error` once the manifest actually needs updating. This is what broke the
+   integration suite — `beforeAll` could not write its fixture, so whole test
+   files were skipped rather than run.
+
+The third stage is the one that matters: a store that cannot complete a write is
+not a database you can build on.
+
+**What we did.** `docker-compose.yml` runs **MinIO** and points HydraDB at it
+over the S3 API (`CLOUD_PROVIDER=aws`, `AWS_ENDPOINT=http://minio:9000`). MinIO
+implements conditional puts, so the engine behaves exactly as it would against
+real S3. After the switch: zero `PutMode::Update` errors, zero GC errors, and
+the full suite runs 100/100 with nothing skipped.
+
+This is not a defect in HydraDB — it is object-store-native by design, and the
+local filesystem simply is not an object store. It is worth documenting loudly
+because `CLOUD_PROVIDER=local` looks like the obvious way to start.
 
 ---
 

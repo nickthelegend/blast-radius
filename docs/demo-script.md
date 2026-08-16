@@ -203,9 +203,10 @@ End on the repo URL.
 
 - Attack clock not moving → the previous run left markings; `blastradius arm`
   resets to a clean incident.
-- Everything slow → `make db-reset && make load && blastradius arm`. Local
-  filesystem storage degrades over long sessions (SlateDB GC can't run against
-  it); a fresh volume restores millisecond queries.
+- Everything slow, or writes failing → `make db-reset && make load &&
+  blastradius arm`. (Storage is MinIO, where SlateDB's conditional writes work;
+  if you have switched to `CLOUD_PROVIDER=local`, expect GC failures and
+  eventually 500s on writes.)
 - Graph canvas blank → resize the browser window once; the layout measures on
   resize.
 - Dashboard shows empty tabs → it defaults to the recorded incident, so this

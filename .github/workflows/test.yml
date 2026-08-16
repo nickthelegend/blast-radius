@@ -21,17 +21,23 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Typecheck
+        # @blast/cli and @blast/dashboard import @blast/core by its package name,
+        # which resolves to packages/core/dist. So core has to be *emitted*
+        # first — typechecking it with --noEmit leaves no declarations behind and
+        # every downstream import fails with TS2307, taking a cascade of
+        # implicit-any errors with it.
         run: |
-          npx tsc -p packages/core/tsconfig.json --noEmit
+          npx tsc -p packages/core/tsconfig.json
           npx tsc -p packages/cli/tsconfig.json --noEmit
           npx tsc -p packages/dashboard/tsconfig.json --noEmit
       - name: Unit tests
         run: npx vitest run tests/unit
       - name: No mocks, stubs or placeholders in shipped source
         run: |
+          # `placeholder="…"` is the HTML input attribute, not a stubbed value.
           if grep -rniE '\b(todo|fixme|mock|stub|dummy|fake|placeholder)\b' \
                packages/core/src packages/cli/src packages/dashboard/src bin \
-             | grep -viE 'placeholder="npm:debug|non-placeholder characters|not yet implemented by LocalFileSystem|does not implement them'; then
+             | grep -viE 'placeholder="|placeholder=\{|non-placeholder characters|not yet implemented by LocalFileSystem|does not implement them'; then
             echo "::error::forbidden marker found in shipped source"
             exit 1
           fi

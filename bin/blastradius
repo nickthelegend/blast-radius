@@ -24,7 +24,10 @@ if (!existsSync(entry)) {
     'blastradius: the CLI has not been built yet.\n' +
       '  make build     (or: npm install && npm run build)\n',
   );
-  process.exit(1);
+  // Exit 2, not 1. This project's CI contract is 0 clean / 1 exposed / 2 could
+  // not run, and a build that never happened is emphatically the third. Exiting
+  // 1 here would report an unbuilt checkout as a supply-chain finding.
+  process.exit(2);
 }
 
 await import(pathToFileURL(entry).href);

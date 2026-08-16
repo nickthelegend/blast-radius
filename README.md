@@ -49,6 +49,7 @@ search-indexer            no              yes
 - [Quick start](#quick-start)
 - [What is in the graph](#what-is-in-the-graph)
 - [Usage — eight worked examples](#usage--eight-worked-examples)
+- [The rest of the CLI](#the-rest-of-the-cli)
 - [The dashboard](#the-dashboard)
 - [How HydraDB is used](#how-hydradb-is-used)
 - [What this project loses without HydraDB](#what-this-project-loses-without-hydradb)
@@ -472,13 +473,34 @@ of fanning out four traversals from the client.
 
 ---
 
+## The rest of the CLI
+
+The eight examples above are the story. These are the commands that make it a
+tool rather than a demo — every one of them is a live query against the graph,
+and every one takes `--json`.
+
+| Command | What it answers |
+|---|---|
+| `blastradius prioritise <version>` | Which exposed repository to fix *first*. Ranks by advisory severity × proximity to the compromised version × whether the dependency is direct, so a 200-repo incident becomes an ordered worklist instead of a wall. |
+| `blastradius why <repo> <version>` | "Why is this package in my tree at all?" One `algo.SPpaths` call returns the shortest chain — `design-system -> serve-static@2.2.1 -> send@1.2.1 -> debug@4.4.3` in ~35ms. |
+| `blastradius preflight [--top N]` | Nothing is compromised yet. This asks what it *would* cost: for the packages you depend on today, how many repositories each one reaches. The answer is usually uncomfortable — `@types/node` reaches nine of them. |
+| `blastradius maintainer-radius <username>` | What burns if this specific publisher account is phished — every package the account can publish to, and every repository transitively reachable from those packages. |
+| `blastradius advisories` | The real OSV records in the graph, ordered by how far they actually reach into your repositories rather than by CVSS alone. |
+| `blastradius sbom <repo>` | The repository's current lockfile as a CycloneDX 1.5 SBOM, with scoped purls and dependency records, generated from the graph's pins. |
+| `blastradius report <version>` | The whole incident as a Markdown document — exposure, window, remediation — for pasting into an incident channel. |
+| `blastradius graph-export <version>` | The blast radius as Graphviz DOT, for rendering outside the dashboard. |
+| `blastradius ci [--repo N] [--fail-on N] [--max-depth N]` | The CI gate. **Exit 0** clean, **exit 1** exposed, **exit 2** the check could not run — a scanner that cannot run must never silently pass. Wired up in [`.github/workflows/blast-radius.yml`](.github/workflows/blast-radius.yml). |
+| `blastradius doctor` | Verifies every engine capability the tool depends on against the live database, over both HTTP and Bolt, and reports where they disagree. |
+
+---
+
 ## The dashboard
 
 ```bash
 make serve   # http://127.0.0.1:4000
 ```
 
-Six views, all backed by live queries — nothing precomputed, nothing mocked:
+Seven views, all backed by live queries — nothing precomputed, nothing mocked:
 
 - **Blast radius** — exposed repos with dependency chains, plus a force-directed
   graph of the exposure rendered from the paths the traversal returned. Toggle
@@ -495,6 +517,18 @@ Six views, all backed by live queries — nothing precomputed, nothing mocked:
 - **Typosquats** — findings filtered by verdict, with the reason for each.
 - **Attack clock** — runs the scenario over SSE and animates exposure spreading,
   with the elapsed incident clock and the latency of each live traversal.
+- **Cypher console** — the queries this product runs, as editable presets you can
+  execute yourself against the live graph. Read-only: the server refuses
+  mutations, because a browser tab is the wrong place to write to the graph.
+
+Every panel carries a **show the query** control that opens the console
+pre-filled with the exact Cypher that produced the numbers on screen — real node
+ids, ready to run. The claim that HydraDB does the traversal is checkable rather
+than asserted.
+
+Press <kbd>⌘K</kbd> anywhere for the command palette; package search is a live
+`STARTS WITH` query against the graph, not a filter over a preloaded list. Views
+are deep-linkable (`?tab=time&v=npm:debug@4.4.3`).
 
 ---
 
@@ -506,7 +540,7 @@ Every native feature this project leans on, and where:
 |---|---|
 | **`algo.SSpaths`** | The core blast radius. One call from the compromised `Version`, `relDirection: 'incoming'`, over `RESOLVED_TO` + `RESOLVED_DIRECT` + `HAS_SNAPSHOT`, returns the shortest chain to every reachable node — repos, lockfiles and packages together. Also the Maintainer Web (`MAINTAINS`, `both`, `maxLen: 2`) and worm propagation (`MAINTAINS`, `both`, `maxLen: 6`). |
 | **`algo.MSpaths`** | The multi-repo check (`--repos`), and the simulation's combined-exposure measurement — every compromised version as an indexed source against every repo as a target, in one round trip. Non-pairwise, deliberately. |
-| **`algo.SPpaths`** | Used in the regression suite to prove a path exists that pairwise `MSpaths` loses. |
+| **`algo.SPpaths`** | `blastradius why <repo> <version>` — the single-pair question "why is this package in my tree at all", answered by the engine rather than by re-walking a full traversal client-side. Also used in the regression suite to prove a path exists that pairwise `MSpaths` loses. |
 | **Pinned snapshots** | Every query runs against one consistent point-in-time view. This is what makes the Time Machine a *query* rather than a framework: a range predicate over `captured_at` inside a snapshot that cannot shift underneath it. |
 | **`causal` vs `strong` reads** | The dashboard's "verified" toggle and `--verified`. `strong` refreshes the reader from object storage before pinning, guaranteeing every committed write is visible. |
 | **Batched `UNWIND` writes** | The entire loader. ~43k rows in ~95 round trips, ~2s. One statement per node or edge would be hopeless at ecosystem scale. |
@@ -642,7 +676,7 @@ changes. Full detail in
 make test
 ```
 
-95 tests, ~50s against a running HydraDB.
+108 tests, ~70s against a running HydraDB.
 
 **Unit** (no database): proximity scoring and every typosquat threshold,
 including the false-positive classes we had to suppress; semver range

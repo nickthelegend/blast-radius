@@ -141,9 +141,19 @@ export function printReport(
     }
   }
 
-  out.write(
-    `\n${dim(`Exposed packages in the dependency graph: ${report.exposedPackages.length}`)}\n`,
-  );
+  // Only SSpaths enumerates the reachable packages. An MSpaths run targets the
+  // requested repositories, so no path ends on a Version and the count is
+  // structurally zero — printing it next to a list of exposed repos would read
+  // as "nothing is affected", which is the opposite of what the report says.
+  if (report.procedure === 'algo.SSpaths') {
+    out.write(
+      `\n${dim(`Exposed packages in the dependency graph: ${report.exposedPackages.length}`)}\n`,
+    );
+  } else {
+    out.write(
+      `\n${dim('Package-level reach is not enumerated in a targeted run — drop --repos for the full radius.')}\n`,
+    );
+  }
 
   const detail = `${report.procedure}, maxLen=${report.maxDepthUsed + 2}, pathCount=${report.pathCountUsed}`;
   out.write(`${bold('Query time:')} ${cyan(duration(report.elapsedMs))}  ${dim(`(${detail})`)}\n`);

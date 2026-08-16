@@ -20,44 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    services:
-      minio:
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: blastradius
-          MINIO_ROOT_PASSWORD: blastradius-local-secret
-          MINIO_DEFAULT_BUCKETS: blast-radius
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl -sf http://localhost:9000/minio/health/live || exit 1"
-          --health-interval 5s --health-timeout 5s --health-retries 20
-
-      hydradb:
-        image: ghcr.io/hydra-db/hydradb:latest
-        env:
-          CLOUD_PROVIDER: aws
-          AWS_BUCKET: blast-radius
-          AWS_REGION: us-east-1
-          AWS_ENDPOINT: http://minio:9000
-          AWS_ACCESS_KEY_ID: blastradius
-          AWS_SECRET_ACCESS_KEY: blastradius-local-secret
-          AWS_ALLOW_HTTP: "true"
-          GRAPH_NAMESPACE: default
-          GRAPH_ID: default
-          GRAPH_CELL_ID: cell-0
-          GRAPH_CELLS: cell-0
-          GRAPH_NODE_ID: node-0
-          GRAPH_BOLT_NODE_ADDRESSES: node-0=127.0.0.1:7687
-          GRAPH_ADVERTISED_BOLT_ADDR: 127.0.0.1:7687
-          GRAPH_DATA_CACHE_DIR: /tmp/hydradb-cache
-          GRAPH_AUTH_TOKEN_FILE: /tmp/hydradb-token
-          GRAPH_ALLOW_PLAINTEXT: "true"
-          RUST_MIN_STACK: "33554432"
-          GRAPH_MAX_CURSOR_BUFFER_BYTES: "536870912"
-        ports:
-          - 8443:8443
-          - 9090:9090
+    # The stack comes up through the repository's own docker-compose.yml rather
+    # than through `services:`. Service containers cannot express what this
+    # engine needs — a bucket created before first write, and a cache directory
+    # chowned to uid 10001 before the node starts, both of which compose models
+    # as init containers with `depends_on: service_completed_successfully`. It
+    # also means CI exercises the exact command the README tells a reader to run.
 
     env:
       HYDRA_HTTP_URL: http://127.0.0.1:8443
@@ -78,6 +46,9 @@ jobs:
           npx tsc -p packages/core/tsconfig.json
           npx tsc -p packages/cli/tsconfig.json
 
+      - name: Start HydraDB and its object store
+        run: docker compose up -d --wait minio-init hydradb-init hydradb
+
       - name: Wait for HydraDB
         run: |
           for i in $(seq 1 60); do
@@ -97,21 +68,65 @@ jobs:
       - name: Scan this repository's lockfile
         run: ./bin/blastradius scan . --name "${GITHUB_REPOSITORY##*/}"
 
+      # The gate is asserted in both directions, because a supply-chain check
+      # that cannot fail is worth nothing and one that cannot pass is worth
+      # less. Nothing is compromised yet, so this must exit 0.
+      - name: Gate — clean tree must pass
+        run: |
+          set +e
+          ./bin/blastradius ci --repo "${GITHUB_REPOSITORY##*/}"
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "::error::gate returned $code on a clean tree; expected 0"
+            exit 1
+          fi
+          echo "clean tree → exit 0"
+
       - name: Arm the known incident
         run: ./bin/blastradius arm
 
-      - name: Blast radius gate
-        run: ./bin/blastradius ci --repo "${GITHUB_REPOSITORY##*/}"
+      # Now debug@4.4.3 is compromised and this repository resolves it through
+      # vitest. The gate must find it and exit 1. Anything else — including a
+      # pass — is a failure of the gate itself.
+      - name: Gate — armed incident must be caught
+        id: gate
+        run: |
+          set +e
+          ./bin/blastradius ci --repo "${GITHUB_REPOSITORY##*/}" | tee gate.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "exit=$code" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Supply-chain gate"
+            echo
+            echo '```'
+            cat gate.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 1 ]; then
+            echo "::error::gate returned $code against an armed incident; expected 1"
+            exit 1
+          fi
+          echo "armed incident → exit 1, caught"
 
+      # These run whether the gate passed or failed — but only once the gate has
+      # actually run. Guarding on `always()` alone means that when the engine
+      # fails to start, every remaining step also fails with "no such file",
+      # burying the one error that matters under four that don't.
       - name: Export SBOM
-        if: always()
+        if: always() && steps.gate.conclusion != 'skipped'
         run: ./bin/blastradius sbom "${GITHUB_REPOSITORY##*/}" --out sbom.cdx.json
 
       - name: Incident report
-        if: failure()
+        if: always() && steps.gate.outputs.exit == '1'
         run: |
           ./bin/blastradius report "$(./bin/blastradius incident --key)" --out incident.md
           cat incident.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Engine logs
+        if: failure()
+        run: docker compose logs --tail 200 hydradb minio
 
       - uses: actions/upload-artifact@v4
         if: always()

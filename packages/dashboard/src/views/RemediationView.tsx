@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { QueryLink } from '../components/QueryLink.js';
 import { api, fmtMs, type RemediationPlan } from '../lib/api.js';
 
 /**
@@ -10,7 +11,13 @@ import { api, fmtMs, type RemediationPlan } from '../lib/api.js';
  * derived from the actual resolution graph rather than from a version-number
  * heuristic.
  */
-export function RemediationView({ versionKey }: { versionKey: string }): JSX.Element {
+export function RemediationView({
+  versionKey,
+  onShowQuery,
+}: {
+  versionKey: string;
+  onShowQuery: (cypher: string) => void;
+}): JSX.Element {
   const [plan, setPlan] = useState<RemediationPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -142,6 +149,7 @@ export function RemediationView({ versionKey }: { versionKey: string }): JSX.Ele
         <div className="muted mono" style={{ fontSize: 12, marginTop: 10 }}>
           {fmtMs(plan.elapsedMs)} · algo.MSpaths
         </div>
+        <QueryLink cypher={plan.cypher} onOpen={onShowQuery} />
       </div>
     </div>
   );

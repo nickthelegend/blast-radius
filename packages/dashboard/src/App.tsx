@@ -43,6 +43,8 @@ export function App(): JSX.Element {
   const [input, setInput] = useState(initial.version ?? '');
   const [error, setError] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  /** Set when a panel asks to show its query; the console opens pre-filled. */
+  const [consoleQuery, setConsoleQuery] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     api
@@ -85,6 +87,11 @@ export function App(): JSX.Element {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const openInConsole = useCallback((cypher: string) => {
+    setConsoleQuery(cypher);
+    setTab('console');
   }, []);
 
   const selectVersion = useCallback((key: string) => {
@@ -221,13 +228,19 @@ export function App(): JSX.Element {
         )}
 
         {tab === 'blast' && versionKey && (
-          <BlastRadiusView versionKey={versionKey} repos={stats?.repos ?? []} />
+          <BlastRadiusView versionKey={versionKey} repos={stats?.repos ?? []} onShowQuery={openInConsole} />
         )}
-        {tab === 'time' && versionKey && <TimeMachineView versionKey={versionKey} />}
-        {tab === 'remediate' && versionKey && <RemediationView versionKey={versionKey} />}
+        {tab === 'time' && versionKey && (
+          <TimeMachineView versionKey={versionKey} onShowQuery={openInConsole} />
+        )}
+        {tab === 'remediate' && versionKey && (
+          <RemediationView versionKey={versionKey} onShowQuery={openInConsole} />
+        )}
         {tab === 'maintainers' && versionKey && <MaintainerView packageKey={packageKey} />}
         {tab === 'typosquats' && <TyposquatView />}
-        {tab === 'console' && <ConsoleView seedVersionKey={versionKey} />}
+        {tab === 'console' && (
+          <ConsoleView seedVersionKey={versionKey} initialQuery={consoleQuery} />
+        )}
         {tab === 'clock' && (
           <AttackClockView
             onSeedChange={(key) => {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { QueryLink } from '../components/QueryLink.js';
 import { api, fmtDate, fmtMs, fmtTime, type TimeMachineResponse } from '../lib/api.js';
 
 /**
@@ -10,7 +11,13 @@ import { api, fmtDate, fmtMs, fmtTime, type TimeMachineResponse } from '../lib/a
  * appears in one column but not the other is the entire argument for keeping
  * lockfile history in a graph at all.
  */
-export function TimeMachineView({ versionKey }: { versionKey: string }): JSX.Element {
+export function TimeMachineView({
+  versionKey,
+  onShowQuery,
+}: {
+  versionKey: string;
+  onShowQuery: (cypher: string) => void;
+}): JSX.Element {
   const [data, setData] = useState<TimeMachineResponse | null>(null);
   const [verified, setVerified] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -210,6 +217,7 @@ export function TimeMachineView({ versionKey }: { versionKey: string }): JSX.Ele
               </tbody>
             </table>
           )}
+          <QueryLink cypher={timeMachine.cypher} onOpen={onShowQuery} />
         </div>
 
         <div className="panel">

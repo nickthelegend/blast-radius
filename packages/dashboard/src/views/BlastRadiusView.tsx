@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { ForceGraph } from '../components/ForceGraph.js';
+import { QueryLink } from '../components/QueryLink.js';
 import {
   api,
   fmtDate,
@@ -26,9 +27,11 @@ export function Chain({ chain }: { chain: ExposedRepo['chain'] }): JSX.Element {
 export function BlastRadiusView({
   versionKey,
   repos,
+  onShowQuery,
 }: {
   versionKey: string;
   repos: Array<{ key: string; name: string }>;
+  onShowQuery: (cypher: string) => void;
 }): JSX.Element {
   const [report, setReport] = useState<BlastRadiusReport | null>(null);
   const [graph, setGraph] = useState<GraphResponse | null>(null);
@@ -203,12 +206,15 @@ export function BlastRadiusView({
           <span className="mono">HAS_SNAPSHOT</span> backwards from the compromised version.
         </p>
         {graph && graph.nodes.length > 0 ? (
-          <ForceGraph
-            nodes={graph.nodes}
-            links={graph.links}
-            sourceId={graph.source.id}
-            highlight={highlight}
-          />
+          <>
+            <ForceGraph
+              nodes={graph.nodes}
+              links={graph.links}
+              sourceId={graph.source.id}
+              highlight={highlight}
+            />
+            <QueryLink cypher={report?.cypher} onOpen={onShowQuery} />
+          </>
         ) : (
           <div className="empty">nothing reachable</div>
         )}

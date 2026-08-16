@@ -48,7 +48,7 @@ search-indexer            no              yes
 
 - [Quick start](#quick-start)
 - [What is in the graph](#what-is-in-the-graph)
-- [Usage — six worked examples](#usage--six-worked-examples)
+- [Usage — eight worked examples](#usage--eight-worked-examples)
 - [The dashboard](#the-dashboard)
 - [How HydraDB is used](#how-hydradb-is-used)
 - [What this project loses without HydraDB](#what-this-project-loses-without-hydradb)
@@ -81,11 +81,14 @@ make time-machine   # exposed now vs exposed then
 make maintainers    # shared-maintainer risk   (algo.SSpaths over MAINTAINS)
 make typosquats     # near-name packages
 make simulate       # replay the worm with a live attack clock
+make remediate      # what to change to clear the exposure
+make scan           # scan this very repository's lockfile into the graph
 make serve          # dashboard on http://127.0.0.1:4000
 ```
 
-`make doctor` verifies connectivity and asserts every engine capability the
-project depends on. Run it first if anything looks wrong.
+`make doctor` verifies connectivity, asserts every engine capability the project
+depends on, and connects a stock Neo4j driver over Bolt. Run it first if
+anything looks wrong.
 
 To rebuild the graph from the live registry instead of the committed snapshot:
 
@@ -156,7 +159,7 @@ questions.
 
 ---
 
-## Usage — six worked examples
+## Usage — eight worked examples
 
 Every command below is real, copy-pasteable, and produces the output shown after
 `make demo`. The compromised package is whatever ingestion recorded in the
@@ -339,7 +342,86 @@ harvest the co-maintainers' credentials, repeat".
 Every `EXPOSED` line is a real query. `--speed` compresses the window into that
 many wall-clock seconds; `--json` emits newline-delimited events.
 
-### 6 — Many repos in one round trip
+### 6 — Scan a real repository, including this one
+
+```bash
+blastradius scan . --name blast-radius-itself
+```
+
+```
+[scan] parsed package-lock.json: 278 packages, 387 resolutions
+[scan] wrote 94 new packages, 252 new versions
+
+SCANNED — acme-corp/blast-radius-itself
+  lockfile               /path/to/blast/package-lock.json
+  format                 package-lock.json
+  captured at            2026-08-16T08:17:11Z (lockfile mtime)
+  packages pinned        271
+  direct dependencies    11
+  resolution edges       384 (npm's own hoisting)
+  already in graph       19 of 271 versions
+  new to the graph       252
+
+Checking this repo against every compromised version…
+  EXPOSED to npm:debug@4.4.3 at depth 2
+          blast-radius-itself -> vitest@2.1.9 -> debug@4.4.3
+```
+
+Point it at **any** JavaScript repository and its real dependency tree joins the
+graph. Nothing here is generated: the versions are what the lockfile pins, the
+resolution edges are npm's own hoisting rules applied to that lockfile's
+directory layout, `captured_at` is the file's mtime, and the direct-dependency
+set is the union of every workspace manifest.
+
+The example above is Blast Radius scanning **itself** — and finding that it is
+exposed, because `vitest@2.1.9` declares `debug: ^4.3.7` and npm hoisted
+`debug@4.4.3`. Verifiable in three lines of `node -e`.
+
+Re-scanning appends a new snapshot and supersedes the previous one, so a repo
+accumulates genuine lockfile history — which is exactly what the Time Machine
+queries. Change a dependency, scan again, and the history is real.
+
+`blastradius inspect-lockfile` parses and reports without writing anything.
+
+### 7 — What do I actually do about it?
+
+```bash
+blastradius remediate npm:debug@4.4.3
+```
+
+```
+REMEDIATION PLAN — npm:debug@4.4.3
+  6 exposed, 6 fixable by a dependency change
+  73 candidate versions tested against the graph
+
+Do this
+  roll back yeoman-generator@8.1.1  (from 8.1.2)
+    clears: admin-dashboard
+  upgrade   vitest@3.2.5  (from 2.1.9)
+    clears: blast-radius-itself
+  roll back finalhandler@2.0.0  (from 2.1.1)
+    clears: customer-portal
+  ...
+
+Per repository
+  blast-radius-itself      vitest 2.1.9 ↑ 3.2.5  crosses a major version
+                           blast-radius-itself -> vitest@2.1.9 -> debug@4.4.3
+
+5 of these are rollbacks rather than upgrades — no newer release in the graph
+avoids the compromised version. Rolling back is a normal response to a live
+compromise, but it is labelled as such rather than dressed up as an upgrade.
+```
+
+Detection is half an incident; this is the other half. For each exposed repo it
+takes the direct dependency carrying the exposure, throws **every published
+version of that package** at the graph in a single `algo.MSpaths` call, and
+keeps the ones with no path to the compromised version. The minimal safe move
+is the recommendation.
+
+When nothing published avoids the bad version, it says so rather than inventing
+an upgrade — and a rollback is always labelled a rollback.
+
+### 8 — Many repos in one round trip
 
 ```bash
 blastradius exposure npm:debug@4.4.3 \
@@ -385,7 +467,7 @@ of fanning out four traversals from the client.
 make serve   # http://127.0.0.1:4000
 ```
 
-Five views, all backed by live queries — nothing precomputed, nothing mocked:
+Six views, all backed by live queries — nothing precomputed, nothing mocked:
 
 - **Blast radius** — exposed repos with dependency chains, plus a force-directed
   graph of the exposure rendered from the paths the traversal returned. Toggle
@@ -394,6 +476,9 @@ Five views, all backed by live queries — nothing precomputed, nothing mocked:
   version, with the compromise window shaded; a scrubber that re-queries
   exposure as of any instant; and the side-by-side now-vs-then comparison with
   an explicit explanation of why the columns differ.
+- **Remediation** — the minimal dependency change per repository, with upgrades
+  and rollbacks distinguished, derived from testing every candidate version
+  against the resolution graph.
 - **Maintainer web** — a radial graph of the accounts that can publish to a
   package and everything else they can reach, with your own dependencies in red.
 - **Typosquats** — findings filtered by verdict, with the reason for each.
@@ -416,7 +501,7 @@ Every native feature this project leans on, and where:
 | **Batched `UNWIND` writes** | The entire loader. ~43k rows in ~95 round trips, ~2s. One statement per node or edge would be hopeless at ecosystem scale. |
 | **OpenCypher subset** | All lookups, aggregates (`count`, `collect`), `ORDER BY` / `LIMIT`, `DISTINCT`, `STARTS WITH` prefix search, and `MERGE`-based idempotent upserts. |
 | **Automatic property indexes** | `MSpaths` selectors resolve `sourceValues` against the string `key` property with no DDL at all. |
-| **Bolt** | `HYDRA_BOLT_URL` is configured and the endpoint is exposed; the client uses the typed HTTP/JSON API because it gives direct access to path payloads with node properties attached. |
+| **Bolt (Neo4j wire protocol)** | `blastradius doctor --bolt` connects a stock `neo4j-driver` to HydraDB, runs a parameterised read and an `algo.SSpaths` call through it, and asserts the result matches the same query over HTTP. Blast Radius runs its own queries over the typed HTTP/JSON API because that transport exposes path payloads with node properties attached, which the report rendering depends on — but the Bolt compatibility is verified, not just claimed. |
 
 Paths come back with **node labels and properties attached**, which is load-
 bearing: the report renders the dependency chain, attributes each exposure to a
@@ -470,6 +555,7 @@ Concretely:
                               ▼
    ┌──────────────────────────────────────────────────────┐
    │  loader     batched UNWIND writes  ~43k rows / ~95 RTs│
+   │  scan/      any real repo's lockfile → live snapshots │
    └──────────────────────────┬───────────────────────────┘
                               ▼
                     ┌───────────────────┐
@@ -481,7 +567,7 @@ Concretely:
                               │
    ┌──────────────────────────┴───────────────────────────┐
    │  queries/  blastRadius · timeMachine · maintainers ·  │
-   │            typosquats · combinedExposure             │
+   │            typosquats · remediation · combinedExposure│
    └───────┬──────────────────────────────────┬───────────┘
            ▼                                  ▼
    blastradius CLI                    Express API → React dashboard
@@ -536,20 +622,25 @@ longer-lived, point `CLOUD_PROVIDER` at MinIO or S3.
 make test
 ```
 
-70 tests, ~35s against a running HydraDB.
+95 tests, ~50s against a running HydraDB.
 
 **Unit** (no database): proximity scoring and every typosquat threshold,
 including the false-positive classes we had to suppress; semver range
 resolution; OSV half-open `[introduced, fixed)` range arithmetic; scoped-key
-parsing; version-timeline "which version introduced it"; PRNG determinism.
+parsing; version-timeline "which version introduced it"; PRNG determinism; and
+lockfile parsing for package-lock v1/v2/v3, pnpm v6/v9 and yarn v1 — including
+npm's nesting resolution, workspace-package exclusion, and a set of assertions
+run against **this repository's own real 278-package lockfile**.
 
 **Integration** (against a real graph): traversal correctness at depths 1, 2 and
 3 with chain verification; depth-limit behaviour; truncation flagging;
 `MSpaths` subset checks; **Time Machine window boundaries — exactly-at-start,
 exactly-at-end, one-millisecond-before, one-millisecond-after**, inverted
 windows, missing windows, and causal/strong equivalence; point-in-time
-`exposureAsOf` including superseded snapshots; maintainer sharing; and the
-`MSpaths` pairwise regression test.
+`exposureAsOf` including superseded snapshots; maintainer sharing; remediation
+planning (finds a clean upgrade, refuses a candidate that still reaches the bad
+version, reports honestly when nothing published is safe); and the `MSpaths`
+pairwise regression test.
 
 Integration tests build their own fixture graph in a reserved id range, so they
 neither depend on nor disturb the demo data.

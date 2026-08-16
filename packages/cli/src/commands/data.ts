@@ -13,6 +13,7 @@ import {
   runIngest,
   SCHEMA_VERSION,
   snapshotExists,
+  verifyBolt,
   verifyEngineCapabilities,
 } from '@blast/core';
 
@@ -243,7 +244,7 @@ export async function markCompromisedCommand(
   );
 }
 
-export async function doctorCommand(): Promise<void> {
+export async function doctorCommand(options: { bolt?: boolean } = {}): Promise<void> {
   const { config, client } = createContext();
   const out = process.stdout;
 
@@ -292,6 +293,25 @@ export async function doctorCommand(): Promise<void> {
     process.exit(1);
   }
   out.write(green('All engine capabilities Blast Radius depends on are present.\n'));
+
+  if (options.bolt) {
+    out.write(`\n${bold('Bolt (Neo4j-compatible) checks')} ${dim(config.hydra.boltUrl)}\n`);
+    const boltChecks = await verifyBolt(client, {
+      boltUrl: config.hydra.boltUrl,
+      authToken: config.hydra.authToken,
+      namespace: config.hydra.namespace,
+      graphId: config.hydra.graphId,
+    });
+    for (const check of boltChecks) {
+      out.write(
+        `  ${check.ok ? green('ok  ') : red('FAIL')} ${pad(check.name, 40)} ${dim(check.detail)}\n`,
+      );
+    }
+    if (boltChecks.some((check) => !check.ok)) {
+      out.write(red('\nBolt checks failed.\n'));
+      process.exit(1);
+    }
+  }
 
   const stats = await graphStats(client);
   if (stats.versions === 0) {

@@ -1,12 +1,4 @@
-import {
-  forceCenter,
-  forceLink,
-  forceManyBody,
-  forceSimulation,
-  forceX,
-  forceY,
-  type Simulation,
-} from 'd3-force';
+import { forceCenter, forceLink, forceManyBody, forceSimulation, forceX, forceY } from 'd3-force';
 import { useEffect, useRef, useState } from 'react';
 
 import type { GraphNode } from '../lib/api.js';
@@ -54,8 +46,6 @@ export function ForceGraph({
   onSelect?: (node: GraphNode) => void;
 }): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const simRef = useRef<Simulation<SimNode, undefined> | null>(null);
-  const stateRef = useRef<{ nodes: SimNode[]; links: SimLink[] }>({ nodes: [], links: [] });
   const [hovered, setHovered] = useState<GraphNode | null>(null);
   // Bumped by the ResizeObserver to re-run the layout effect once the container
   // actually has a size.
@@ -104,8 +94,6 @@ export function ForceGraph({
       source.fy = height / 2;
     }
 
-    stateRef.current = { nodes: simNodes, links: simLinks };
-
     const simulation = forceSimulation<SimNode>(simNodes)
       .force(
         'link',
@@ -121,8 +109,6 @@ export function ForceGraph({
       .force('center', forceCenter(width / 2, height / 2).strength(0.05))
       .force('x', forceX<SimNode>(width / 2).strength(0.02))
       .force('y', forceY<SimNode>(height / 2).strength(0.02));
-
-    simRef.current = simulation;
 
     const draw = () => {
       ctx.clearRect(0, 0, width, height);

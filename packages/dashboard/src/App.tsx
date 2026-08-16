@@ -4,14 +4,16 @@ import { api, type StatsResponse } from './lib/api.js';
 import { AttackClockView } from './views/AttackClockView.js';
 import { BlastRadiusView } from './views/BlastRadiusView.js';
 import { MaintainerView } from './views/MaintainerView.js';
+import { RemediationView } from './views/RemediationView.js';
 import { TimeMachineView } from './views/TimeMachineView.js';
 import { TyposquatView } from './views/TyposquatView.js';
 
-type Tab = 'blast' | 'time' | 'maintainers' | 'typosquats' | 'clock';
+type Tab = 'blast' | 'time' | 'remediate' | 'maintainers' | 'typosquats' | 'clock';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'blast', label: 'Blast radius' },
   { id: 'time', label: 'Time machine' },
+  { id: 'remediate', label: 'Remediation' },
   { id: 'maintainers', label: 'Maintainer web' },
   { id: 'typosquats', label: 'Typosquats' },
   { id: 'clock', label: 'Attack clock' },
@@ -128,6 +130,7 @@ export function App(): JSX.Element {
           <BlastRadiusView versionKey={versionKey} repos={stats?.repos ?? []} />
         )}
         {tab === 'time' && versionKey && <TimeMachineView versionKey={versionKey} />}
+        {tab === 'remediate' && versionKey && <RemediationView versionKey={versionKey} />}
         {tab === 'maintainers' && versionKey && <MaintainerView packageKey={packageKey} />}
         {tab === 'typosquats' && <TyposquatView />}
         {tab === 'clock' && (

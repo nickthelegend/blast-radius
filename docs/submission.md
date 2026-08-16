@@ -38,8 +38,20 @@ Given a compromised package version it answers, in one native traversal:
 - which real packages on npm have names suspiciously close to your own
   dependencies.
 
-It ships a CLI, a live dashboard, and a scripted incident simulator that replays
-the May 2026 TanStack worm pattern against the real graph with an attack clock.
+It also **scans real repositories**: point `blastradius scan` at any JavaScript
+project and its actual lockfile — every pinned version, npm's own hoisting
+resolution, the file's mtime as the capture instant — joins the graph. Scanning
+Blast Radius's own repository finds that it is itself exposed, through
+`vitest@2.1.9 → debug@4.4.3`.
+
+And it answers the follow-up question: `blastradius remediate` takes every
+published version of each offending dependency, throws them all at the graph in
+one `algo.MSpaths` call, and reports the minimal change that stops the
+compromised version being resolved — labelling rollbacks as rollbacks.
+
+It ships a CLI, a six-view live dashboard, and a scripted incident simulator that
+replays the May 2026 TanStack worm pattern against the real graph with an attack
+clock.
 
 ---
 
@@ -76,6 +88,9 @@ it.
 - **`causal` / `strong` reads** — the dashboard's "verified" toggle; `strong`
   refreshes from object storage before pinning.
 - **Batched `UNWIND` writes** — 43,651 rows in 95 round trips, ~2.4 seconds.
+- **Bolt (Neo4j wire protocol)** — `blastradius doctor --bolt` connects a stock
+  `neo4j-driver`, runs `algo.SSpaths` through it, and asserts the result matches
+  the same query over HTTP.
 - **Automatic property indexes** — `MSpaths` selectors resolve against a string
   `key` property with no DDL.
 
@@ -133,7 +148,7 @@ make serve         # dashboard on http://127.0.0.1:4000
 ```
 
 `make doctor` verifies connectivity and asserts every engine capability used.
-`make test` runs 70 tests in ~35s.
+`make test` runs 95 tests in ~55s.
 
 ---
 

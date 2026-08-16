@@ -13,6 +13,9 @@
  *   app-c  ──RESOLVED_DIRECT──▶ leaf                          (depth 1, direct)
  *   app-d  ──RESOLVED_DIRECT──▶ safe                          (not exposed)
  *
+ * Remediation fixtures: mid-1@2.0.0 exists and depends on nothing (a real fix
+ * for app-a); mid-2@2.0.0 exists but still reaches the bad leaf (not a fix).
+ *
  * Maintainers:  alice maintains leaf + sibling-1;  bob maintains leaf only.
  */
 import { HydraClient, hydraConfigFrom, loadConfig } from '../../packages/core/src/index.js';
@@ -25,6 +28,11 @@ export const ids = {
   mid2: BASE + 3,
   safe: BASE + 4,
   sibling1: BASE + 5,
+  // A newer mid-1 that dropped its dependency on the bad leaf — the fix the
+  // remediation planner should find for app-a.
+  mid1v2: BASE + 6,
+  // A newer mid-2 that still depends on the bad leaf, so it is NOT a fix.
+  mid2v2: BASE + 7,
 
   pkgLeaf: BASE + 20,
   pkgSibling: BASE + 21,
@@ -115,6 +123,8 @@ export async function buildFixture(client: HydraClient): Promise<void> {
           version(ids.mid2, 'mid-2', '1.0.0'),
           version(ids.safe, 'safe', '1.0.0'),
           version(ids.sibling1, 'sibling-1', '1.0.0'),
+          version(ids.mid1v2, 'mid-1', '2.0.0'),
+          version(ids.mid2v2, 'mid-2', '2.0.0'),
         ],
       },
     },
@@ -242,6 +252,9 @@ export async function buildFixture(client: HydraClient): Promise<void> {
       rows: [
         { source_vertex: ids.mid1, destination_vertex: ids.mid2, relationship_vertex: nextRel() },
         { source_vertex: ids.mid2, destination_vertex: ids.leaf, relationship_vertex: nextRel() },
+        // mid-1@2.0.0 depends on nothing — it is the clean upgrade.
+        // mid-2@2.0.0 still reaches the bad leaf, so it is not a fix.
+        { source_vertex: ids.mid2v2, destination_vertex: ids.leaf, relationship_vertex: nextRel() },
       ],
     },
   });

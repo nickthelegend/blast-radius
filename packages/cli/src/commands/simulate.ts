@@ -46,7 +46,6 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
   });
 
   let seedKey = '';
-  let peakRepos = 0;
   let windowFrom = 0;
 
   for await (const event of events) {
@@ -87,7 +86,6 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
       }
 
       case 'measure': {
-        peakRepos = Math.max(peakRepos, event.exposedRepoCount);
         const color =
           event.exposedRepoCount === 0 ? green : event.exposedRepoCount < 5 ? yellow : red;
         out.write(

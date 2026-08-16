@@ -91,7 +91,35 @@ Toggle **verified**.
 
 ---
 
-## 1:30 – 2:00 — Quick hits
+## 1:30 – 1:50 — Scan this very repository
+
+Terminal:
+
+```bash
+blastradius scan . --name blast-radius-itself
+```
+
+> That is not the demo dataset — that is this project's own package-lock.json.
+> Two hundred and seventy-one real packages, and npm's own hoisting resolution
+> read straight off the lockfile.
+
+Wait for the last line.
+
+> And it's exposed. `vitest` two-point-one-nine pulls in `debug` four-four-three.
+> The tool just found a real path from a real lockfile to the package we
+> compromised. Point it at your repo and it does the same thing.
+
+```bash
+blastradius remediate npm:debug@4.4.3
+```
+
+> And here's the fix — every published version of each offending dependency
+> tested against the graph in one MSpaths call. Note it says "roll back" where
+> it means roll back; five of these have no newer safe release.
+
+---
+
+## 1:50 – 2:10 — Quick hits
 
 **Maintainer web** tab:
 
@@ -109,7 +137,7 @@ Toggle **verified**.
 
 ---
 
-## 2:00 – 2:35 — What HydraDB is doing
+## 2:10 – 2:35 — What HydraDB is doing
 
 Terminal, side by side with the primitive names on screen:
 
@@ -125,6 +153,7 @@ algo.MSpaths        many sources × many targets, one round trip
 pinned snapshots    every query is point-in-time
 causal / strong     the "verified" toggle
 batched UNWIND      43,651 rows in 95 round trips, 2.4s
+Bolt                stock neo4j-driver, verified against HTTP
 ```
 
 **Say:**

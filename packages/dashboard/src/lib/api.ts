@@ -136,6 +136,39 @@ export interface TyposquatFinding {
   rationale: string;
 }
 
+export interface RepoFix {
+  repoKey: string;
+  repoName: string;
+  depth: number;
+  chainText: string;
+  kind: string;
+  packageKey: string;
+  packageName: string;
+  currentVersion: string;
+  targetVersion: string | null;
+  safeVersions: string[];
+  isMajorBump: boolean;
+  direction: 'upgrade' | 'rollback' | 'none';
+  explanation: string;
+}
+
+export interface RemediationPlan {
+  source: VersionRef;
+  fixes: RepoFix[];
+  distinctChanges: Array<{
+    packageName: string;
+    from: string[];
+    to: string;
+    repos: string[];
+    direction: 'upgrade' | 'rollback' | 'none';
+  }>;
+  reposExposed: number;
+  reposFixable: number;
+  elapsedMs: number;
+  candidatesTested: number;
+  cypher: string;
+}
+
 export interface StatsResponse {
   stats: Record<string, number>;
   compromised: VersionRef[];
@@ -205,6 +238,8 @@ export const api = {
     ),
   maintainers: (packageKey: string) =>
     get<MaintainerReport>(`/api/maintainers?package=${encodeURIComponent(packageKey)}`),
+  remediation: (versionKey: string) =>
+    get<RemediationPlan>(`/api/remediation?version=${encodeURIComponent(versionKey)}`),
   typosquats: () =>
     get<{ findings: TyposquatFinding[]; elapsedMs: number; cypher: string }>('/api/typosquats'),
 };

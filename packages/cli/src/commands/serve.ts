@@ -18,6 +18,7 @@ import {
   listVersionsOfPackage,
   maintainerWeb,
   markCompromised,
+  planRemediation,
   SCENARIOS,
   simulate,
   timeMachine,
@@ -294,6 +295,23 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
         consistency: consistencyFor(req),
       });
       res.json({ instant, exposures });
+    }),
+  );
+
+  // --- remediation ---------------------------------------------------------
+
+  app.get(
+    '/api/remediation',
+    handle(async (req, res) => {
+      const key = String(req.query.version ?? '');
+      const version = await findVersion(client, key);
+      if (!version) {
+        res.status(404).json({ error: `version not found: ${key}` });
+        return;
+      }
+      const options = { ...traversal(), consistency: consistencyFor(req) };
+      const report = await blastRadius(client, version, options);
+      res.json(await planRemediation(client, report, options));
     }),
   );
 

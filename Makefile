@@ -67,6 +67,8 @@ demo: env build db-reset load mark ## one command: fresh DB, loaded graph, incid
 	@echo "  make exposure"
 	@echo "  make time-machine"
 	@echo "  make simulate"
+	@echo "  make remediate  (what to change to fix it)"
+	@echo "  make scan       (scan this very repo's lockfile)"
 	@echo "  make serve      (dashboard on http://127.0.0.1:4000)"
 
 .PHONY: mark
@@ -95,13 +97,21 @@ maintainers: ## shared-maintainer risk for the demo package
 typosquats: ## typosquat proximity check
 	$(CLI) typosquats
 
+.PHONY: remediate
+remediate: ## what to change to clear the exposure
+	$(CLI) remediate $(SEED)
+
+.PHONY: scan
+scan: ## scan THIS repository's own lockfile into the graph
+	$(CLI) scan . --name blast-radius-itself
+
 .PHONY: simulate
 simulate: ## replay the TanStack-worm scenario against the live graph
 	$(CLI) simulate --scenario tanstack-worm-2026
 
 .PHONY: doctor
 doctor: ## verify HydraDB connectivity and every engine capability used
-	$(CLI) doctor
+	$(CLI) doctor --bolt
 
 .PHONY: serve
 serve: ## run the dashboard + API

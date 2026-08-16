@@ -15,7 +15,9 @@ import {
   statsCommand,
 } from './commands/data.js';
 import { exposureCommand } from './commands/exposure.js';
+import { inspectLockfileCommand, scanCommand } from './commands/scan.js';
 import { maintainersCommand } from './commands/maintainers.js';
+import { remediateCommand } from './commands/remediate.js';
 import { serveCommand } from './commands/serve.js';
 import { listScenariosCommand, simulateCommand } from './commands/simulate.js';
 import { timeMachineCommand } from './commands/timeMachine.js';
@@ -65,6 +67,15 @@ program
   .option('--no-compare', 'skip the "exposed now vs during window" comparison')
   .option('--json', 'emit JSON')
   .action(timeMachineCommand);
+
+program
+  .command('remediate')
+  .description('what to change to clear the exposure — minimal dependency upgrades')
+  .argument('<version>', 'compromised version key')
+  .option('--depth <n>', 'maximum dependency-chain depth')
+  .option('--verified', 'read with strong consistency')
+  .option('--json', 'emit JSON')
+  .action(remediateCommand);
 
 program
   .command('maintainers')
@@ -133,7 +144,24 @@ program
 program
   .command('doctor')
   .description('check HydraDB connectivity and verify every engine capability used')
+  .option('--bolt', 'additionally verify the Neo4j-compatible Bolt endpoint')
   .action(doctorCommand);
+
+program
+  .command('scan')
+  .description("scan a real repository's lockfile into the graph")
+  .argument('[directory]', 'repository to scan', '.')
+  .option('--org <name>', 'organization to file it under')
+  .option('--name <name>', 'repo name (defaults to package.json name)')
+  .option('--at <instant>', 'override the capture instant (defaults to lockfile mtime)')
+  .option('--json', 'emit JSON')
+  .action(scanCommand);
+
+program
+  .command('inspect-lockfile')
+  .description('parse a lockfile and report what is in it, without writing to the graph')
+  .argument('[directory]', 'repository to inspect', '.')
+  .action(inspectLockfileCommand);
 
 program
   .command('serve')

@@ -49,6 +49,7 @@ export interface BlastRadiusReport {
   consistency: string;
   /** The snapshot the traversal was pinned to. */
   readEpoch: number | null;
+  cursorPages?: number;
   procedure: string;
   cypher: string;
 }
@@ -270,6 +271,17 @@ export interface EngineReport {
   compute: { tasks: number; queueMs: number };
 }
 
+
+export interface BudgetSample {
+  budget: number; paths: number; repos: number; elapsedMs: number; truncated: boolean;
+}
+export interface ConsistencySample {
+  consistency: 'causal' | 'strong'; repos: number; paths: number; elapsedMs: number; readEpoch: number | null;
+}
+export interface AblationRow {
+  relTypes: string[]; label: string; repos: number; paths: number; elapsedMs: number;
+}
+
 /** An API error that carried near-matches the caller probably meant. */
 export class ApiError extends Error {
   constructor(
@@ -383,6 +395,16 @@ export const api = {
   advisories: () =>
     get<{ advisories: AdvisoryView[]; elapsedMs: number }>('/api/advisories'),
   engine: () => get<EngineReport>('/api/engine'),
+  labBudget: (version: string) =>
+    get<{ samples: BudgetSample[]; settlesAt: number | null; cypher: string }>(
+      `/api/lab/budget?version=${encodeURIComponent(version)}`,
+    ),
+  labConsistency: (version: string) =>
+    get<{ samples: ConsistencySample[]; agree: boolean; epochGap: number | null }>(
+      `/api/lab/consistency?version=${encodeURIComponent(version)}`,
+    ),
+  labAblation: (version: string) =>
+    get<{ rows: AblationRow[] }>(`/api/lab/ablation?version=${encodeURIComponent(version)}`),
   typosquats: () =>
     get<{ findings: TyposquatFinding[]; elapsedMs: number; cypher: string }>('/api/typosquats'),
 };

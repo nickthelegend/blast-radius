@@ -128,6 +128,7 @@ export function BlastRadiusView({
               // control is asking the reader to take the change on faith.
               ['consistency', report.consistency],
               ['read epoch', report.readEpoch],
+          ['round trips', report.cursorPages ?? null],
             ]}
           />
         )}

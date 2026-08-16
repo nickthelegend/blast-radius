@@ -66,7 +66,7 @@ lockfile history as a queryable graph. That is the whole position.
 - The user's own vocabulary is lockfiles, resolution, transitive depth, pinning,
   advisories, purls, and semver ranges. The product speaks that language natively
   and does not translate it into softer words.
-- Both a CLI (30 commands) and a browser dashboard exist, and the CLI is the
+- Both a CLI (31 commands) and a browser dashboard exist, and the CLI is the
   senior surface: every dashboard view corresponds to a command.
 - The graph is real: 1,480 packages, 12,463 versions, 10,015 resolved edges,
   40 real OSV advisories, 19 repositories, persisted in object storage.

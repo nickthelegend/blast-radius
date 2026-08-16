@@ -4,6 +4,7 @@ import { api, type StatsResponse } from './lib/api.js';
 import { SheetBoundary } from './components/SheetBoundary.js';
 import { AdvisoryView } from './views/AdvisoryView.js';
 import { EngineView } from './views/EngineView.js';
+import { LabView } from './views/LabView.js';
 import { AttackClockView } from './views/AttackClockView.js';
 import { BlastRadiusView } from './views/BlastRadiusView.js';
 import { MaintainerView } from './views/MaintainerView.js';
@@ -22,7 +23,8 @@ type Tab =
   | 'typosquats'
   | 'clock'
   | 'console'
-  | 'engine';
+  | 'engine'
+  | 'lab';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'blast', label: 'Blast radius' },
@@ -34,6 +36,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'clock', label: 'Attack clock' },
   { id: 'console', label: 'Cypher console' },
   { id: 'engine', label: 'Engine' },
+  { id: 'lab', label: 'Lab' },
 ];
 
 const VALID_TABS = new Set<Tab>(TABS.map((t) => t.id));
@@ -140,10 +143,16 @@ export function App(): JSX.Element {
         setShortcutsOpen(false);
         return;
       }
-      const index = Number(event.key);
-      if (Number.isInteger(index) && index >= 1 && index <= TABS.length) {
-        event.preventDefault();
-        setTab(TABS[index - 1]!.id);
+      // Digits select sheets, with `0` as the tenth — the row on a keyboard
+      // reads 1…9 0, so the tenth sheet belongs on the key that sits tenth,
+      // not on a two-key chord.
+      const typed = Number(event.key);
+      if (Number.isInteger(typed) && event.key.length === 1) {
+        const index = typed === 0 ? 10 : typed;
+        if (index >= 1 && index <= TABS.length) {
+          event.preventDefault();
+          setTab(TABS[index - 1]!.id);
+        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -261,7 +270,8 @@ export function App(): JSX.Element {
               {TABS.map((entry, index) => (
                 <div key={entry.id}>
                   <dt>
-                    <kbd>{index + 1}</kbd>
+                    {/* The tenth sheet is on `0`, matching the keyboard row. */}
+                    <kbd>{index === 9 ? 0 : index + 1}</kbd>
                   </dt>
                   <dd>{entry.label}</dd>
                 </div>
@@ -300,7 +310,7 @@ export function App(): JSX.Element {
       <main>
         {error && <div className="error">{error}</div>}
 
-        {tab !== 'advisories' && tab !== 'typosquats' && tab !== 'clock' && tab !== 'console' && tab !== 'engine' && (
+        {tab !== 'advisories' && tab !== 'typosquats' && tab !== 'clock' && tab !== 'console' && tab !== 'engine' && tab !== 'lab' && (
           <div className="panel" style={{ marginBottom: 16 }}>
             <div className="row">
               <span className="muted">compromised version</span>
@@ -346,7 +356,7 @@ export function App(): JSX.Element {
           </div>
         )}
 
-        {!versionKey && tab !== 'advisories' && tab !== 'typosquats' && tab !== 'clock' && tab !== 'console' && tab !== 'engine' && (
+        {!versionKey && tab !== 'advisories' && tab !== 'typosquats' && tab !== 'clock' && tab !== 'console' && tab !== 'engine' && tab !== 'lab' && (
           <div className="empty">
             Nothing is marked compromised yet. Run <span className="mono">make demo</span>, or{' '}
             <span className="mono">blastradius mark-compromised &lt;version&gt; --from … --to …</span>
@@ -375,6 +385,7 @@ export function App(): JSX.Element {
           {tab === 'advisories' && <AdvisoryView />}
           {tab === 'typosquats' && <TyposquatView />}
           {tab === 'engine' && <EngineView />}
+          {tab === 'lab' && versionKey && <LabView version={versionKey} />}
           {tab === 'console' && (
             <ConsoleView seedVersionKey={versionKey} initialQuery={consoleQuery} />
           )}

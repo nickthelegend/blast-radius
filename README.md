@@ -724,7 +724,7 @@ flowchart TB
     q3["maintainers<br/>typosquats"]
   end
 
-  queries --> cli["blastradius CLI<br/>30 commands"]
+  queries --> cli["blastradius CLI<br/>31 commands"]
   queries --> api["Express API<br/>admission control<br/>epoch-invalidated cache"]
 
   api --> dash["React dashboard<br/>9 sheets · SSE attack clock"]

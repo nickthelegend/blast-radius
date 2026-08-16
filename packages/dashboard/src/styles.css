@@ -1363,3 +1363,13 @@ tbody tr.row-selected td:first-child { color: var(--ink); }
   transition: color 110ms linear, border-color 110ms linear;
 }
 .copy-table button:hover { color: var(--ink); border-color: var(--rule-lit); }
+
+/* A plotted magnitude inside a table cell — the budget sweep's path count.
+   Drawn in the reference ink rather than a state colour: this is a
+   measurement, not an exposure verdict. */
+.bar {
+  height: 9px;
+  min-width: 2px;
+  background: var(--survey-deep);
+  border-left: 2px solid var(--survey);
+}

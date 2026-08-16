@@ -107,13 +107,13 @@ Depth: **core** (the engine does the work) · **surface** (a call, but the logic
 
 | # | Feature | HydraDB capability used | Depth | Why a judge notices |
 |---|---|---|---|---|
-| 1 | **Exposure diff across two epochs** — compare the graph at read epoch N vs M, not two wall-clock instants | `read_epoch` + pinned snapshots | core | Version-controlled graph state; impossible without engine-provided epochs |
+| — | ~~**Exposure diff across two epochs**~~ **NOT BUILDABLE.** Probed: the engine rejects `read_epoch` on a request with "read_epoch is not supported yet", and silently ignores `as_of_epoch` / `at_epoch` / `snapshot_epoch` (each returns the *current* epoch). Historical epoch reads do not exist in this engine. Withdrawn rather than left as an aspiration | — | — | — |
 | 2 | **Read-your-writes via `bookmark`** — pass the bookmark from a write into the next read so `scan` → `exposure` is guaranteed to see the scan | `bookmark` token | core | Uses the session-guarantee primitive most graph demos never touch |
 | 3 | **Failure-class-aware retry** — retry contention and routing, never retry `query`; surface freshness failures as staleness | `graph_query_failed_by_class` | core | Correct distributed-systems behaviour driven by the engine's own taxonomy |
-| 4 | **Snapshot-pinned incident workspace** — pin one epoch for an entire investigation so every sheet answers from the same instant | pinned snapshots | core | Solves the real "did the graph move under me" problem mid-incident |
+| — | ~~**Snapshot-pinned incident workspace**~~ **NOT BUILDABLE** for the same reason: a sheet cannot be pinned to a past epoch when the engine only ever reads the present. What *is* buildable — and shipped — is pinning to a past *capture instant* via `captured_at`, which is a property of the data rather than of storage |
 | 5 | **Truncation-proof traversal** — detect `pathCount` saturation and re-issue with a widened budget, reporting both | `algo.SSpaths` path budget semantics | core | Directly addresses the engine's silent-truncation trap this project documented |
 | 6 | **Multi-seed blast radius** — every version an advisory affects as indexed sources in one `MSpaths` call | `algo.MSpaths` indexed selectors | core | One round trip where every competitor loops |
-| 7 | **Bitemporal "as-of" console** — run any user Cypher against a chosen historical epoch | pinned snapshots + console | core | Time travel over arbitrary queries, not just the built-in ones |
+| 7 | **Bitemporal "as-of" console** — run any user Cypher as of a past *capture instant*, rewritten over `captured_at` / `superseded_at` | bitemporal data model + `WHERE` ranges | core | Time travel over arbitrary queries. Engine epochs cannot do this; the data model can |
 | 8 | **Reverse-reachability with edge-type ablation** — same traversal with `RESOLVED_DIRECT` on and off, side by side | `relTypes` on `SSpaths` | core | Makes the modelling decision visible as a measurement |
 | 9 | **Consistency A/B** — same query at `causal` and `strong`, showing epoch and any row delta | consistency modes | core | Demonstrates a real distributed-systems trade-off live |
 | 10 | **Write-amplification panel** — attempts vs commits vs retries during a load | `graph_write_attempts/commits/retries` | core | Engine-internal truth no application-side metric could produce |

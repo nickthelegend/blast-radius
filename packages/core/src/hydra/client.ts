@@ -78,6 +78,8 @@ export interface QueryResult {
   records: Array<Record<string, CellValue>>;
   readEpoch: number | null;
   bookmark: string | null;
+  /** Round trips this query cost, including the first. */
+  cursorPages?: number;
   /** Wall-clock milliseconds for the round trip, used in every CLI report. */
   elapsedMs: number;
 }
@@ -365,14 +367,16 @@ export class HydraClient {
     queryId: string,
   ): Promise<QueryResult> {
     const first = await this.execute(cypher, options, queryId);
-    if (first.nextCursor === null) return first;
+    if (first.nextCursor === null) return { ...first, cursorPages: 1 };
 
     const rows = [...first.rows];
     const records = [...first.records];
     let elapsedMs = first.elapsedMs;
     let cursor: number | null = first.nextCursor;
+    let pages = 1;
     // A page cursor that never advances would loop forever; bound it.
     for (let page = 0; cursor !== null && page < 10_000; page++) {
+      pages += 1;
       // The same query id: a cursor is scoped to the request that produced it,
       // and a fresh id is rejected with "result cursor does not belong to this
       // query request".
@@ -390,6 +394,9 @@ export class HydraClient {
       readEpoch: first.readEpoch,
       bookmark: first.bookmark,
       elapsedMs,
+      // How many round trips this single logical query really cost. Pagination
+      // is otherwise invisible: one `query()` call can be a hundred requests.
+      cursorPages: pages,
     };
   }
 

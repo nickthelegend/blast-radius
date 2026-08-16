@@ -14,6 +14,7 @@ export * from './ingest/scan.js';
 export * from './ingest/scenarios.js';
 export * from './ingest/seeds.js';
 export * from './queries/blastRadius.js';
+export * from './queries/engineLab.js';
 export * from './queries/lookup.js';
 export * from './export/artifacts.js';
 export * from './queries/insights.js';

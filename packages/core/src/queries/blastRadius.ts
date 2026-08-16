@@ -75,6 +75,8 @@ export interface BlastRadiusReport {
   pathCountUsed: number;
   truncated: boolean;
   elapsedMs: number;
+  /** Round trips the traversal cost — pagination is otherwise invisible. */
+  cursorPages?: number;
   consistency: string;
   /** The snapshot this traversal was pinned to. */
   readEpoch: number | null;
@@ -90,6 +92,15 @@ export interface BlastRadiusOptions {
   /** Called if the path budget had to be reduced to fit the server's cursor
    *  buffer — a reduced budget can under-report, so it is never silent. */
   onDegrade?: (pathCount: number, reason: string) => void;
+  /**
+   * Override the relationship types the traversal walks.
+   *
+   * Defaults to all of them, which is the only correct answer for a report.
+   * Narrowing it is for ablation — measuring how much of the exposure each
+   * edge type accounts for — and must never be the default anywhere a user
+   * reads an exposure number.
+   */
+  relTypes?: readonly string[];
 }
 
 const str = (value: unknown): string => (typeof value === 'string' ? value : '');
@@ -226,6 +237,7 @@ function buildReport(
     procedure: BlastRadiusReport['procedure'];
     cypher: string;
     readEpoch: number | null;
+    cursorPages?: number;
   },
 ): BlastRadiusReport {
   const packages = new Map<string, ExposedPackage>();
@@ -309,6 +321,7 @@ function buildReport(
     // silently under-reporting a blast radius is the worst failure this tool has.
     truncated: paths.length >= Math.min(options.pathCount, options.resultLimit),
     elapsedMs: meta.elapsedMs,
+    cursorPages: meta.cursorPages,
     consistency: meta.consistency,
     procedure: meta.procedure,
     cypher: meta.cypher,
@@ -338,6 +351,7 @@ async function runPathProcedure(
   elapsedMs: number;
   pathCount: number;
   readEpoch: number | null;
+  cursorPages?: number;
 }> {
   let pathCount = options.pathCount;
   let resultLimit = options.resultLimit;
@@ -352,7 +366,8 @@ async function runPathProcedure(
         elapsedMs: result.elapsedMs,
         pathCount,
         readEpoch: result.readEpoch,
-      };
+        cursorPages: result.cursorPages,
+  };
     } catch (error) {
       const isBufferLimit =
         error instanceof HydraError &&
@@ -439,7 +454,7 @@ export async function blastRadius(
   options: BlastRadiusOptions,
 ): Promise<BlastRadiusReport> {
   const maxLen = options.maxDepth + 2; // + RESOLVED_DIRECT + HAS_SNAPSHOT
-  const relTypes = BLAST_REL_TYPES.map((type) => `'${type}'`).join(', ');
+  const relTypes = (options.relTypes ?? BLAST_REL_TYPES).map((type) => `'${type}'`).join(', ');
   const build = (pathCount: number, resultLimit: number) =>
     `CALL algo.SSpaths({sourceNode: ${source.id}, relTypes: [${relTypes}], ` +
     `relDirection: 'incoming', maxLen: ${maxLen}, pathCount: ${pathCount}, ` +
@@ -451,6 +466,7 @@ export async function blastRadius(
   ]);
   return buildReport(source, extractPaths(result.records), pins, { ...options, pathCount: result.pathCount }, {
     elapsedMs: result.elapsedMs,
+    cursorPages: result.cursorPages,
     consistency: options.consistency ?? 'causal',
     readEpoch: result.readEpoch,
     procedure: 'algo.SSpaths',

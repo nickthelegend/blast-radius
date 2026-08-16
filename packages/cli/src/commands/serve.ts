@@ -15,7 +15,10 @@ import {
   graphStats,
   listCompromisedVersions,
   listRepos,
+  ablateEdgeTypes,
   boltQuery,
+  calibrateBudget,
+  compareConsistency,
   resolveRepoKeys,
   suggestVersions,
   listVersionsOfPackage,
@@ -612,6 +615,66 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   );
 
   /** The engine's own metrics, for the live panel. */
+  /** Resolve `?version=` or answer 400/404 exactly as the other sheets do. */
+  const resolveVersion = async (key: string, req: Request, res: Response) => {
+    const wanted = required(req, res, 'version');
+    if (wanted === null) return null;
+    const version = await findVersion(client, wanted);
+    if (!version) {
+      res.status(404).json({
+        error: `version not found: ${wanted}`,
+        suggestions: await suggestVersions(client, wanted),
+      });
+      return null;
+    }
+    return version;
+  };
+
+  app.get(
+    '/api/lab/budget',
+    handle(async (req, res) => {
+      const version = await resolveVersion('', req, res);
+      if (!version) return;
+      res.json(
+        await calibrateBudget(client, version, {
+          maxDepth: config.traversal.maxDepth,
+          consistency: config.traversal.readConsistency,
+        }),
+      );
+    }),
+  );
+
+  app.get(
+    '/api/lab/consistency',
+    handle(async (req, res) => {
+      const version = await resolveVersion('', req, res);
+      if (!version) return;
+      res.json(
+        await compareConsistency(client, version, {
+          maxDepth: config.traversal.maxDepth,
+          pathCount: config.traversal.pathCount,
+          resultLimit: config.traversal.resultLimit,
+        }),
+      );
+    }),
+  );
+
+  app.get(
+    '/api/lab/ablation',
+    handle(async (req, res) => {
+      const version = await resolveVersion('', req, res);
+      if (!version) return;
+      res.json({
+        rows: await ablateEdgeTypes(client, version, {
+          maxDepth: config.traversal.maxDepth,
+          pathCount: config.traversal.pathCount,
+          resultLimit: config.traversal.resultLimit,
+          consistency: config.traversal.readConsistency,
+        }),
+      });
+    }),
+  );
+
   app.get(
     '/api/engine',
     handle(async (_req, res) => {

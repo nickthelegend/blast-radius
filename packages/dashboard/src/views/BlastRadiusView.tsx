@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { ForceGraph } from '../components/ForceGraph.js';
 import { Conditions } from '../components/Conditions.js';
+import { ApiError } from '../lib/api.js';
 import { QueryLink } from '../components/QueryLink.js';
 import { Plotting } from '../components/Plotting.js';
 import {
@@ -30,10 +31,12 @@ export function BlastRadiusView({
   versionKey,
   repos,
   onShowQuery,
+  onPickSuggestion,
 }: {
   versionKey: string;
   repos: Array<{ key: string; name: string }>;
   onShowQuery: (cypher: string) => void;
+  onPickSuggestion?: (versionKey: string) => void;
 }): JSX.Element {
   const [report, setReport] = useState<BlastRadiusReport | null>(null);
   const [graph, setGraph] = useState<GraphResponse | null>(null);
@@ -42,6 +45,7 @@ export function BlastRadiusView({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<ExposedRepo | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
   useEffect(() => {
     if (!versionKey) return;
@@ -59,7 +63,9 @@ export function BlastRadiusView({
         setGraph(graphData);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setSuggestions(err instanceof ApiError ? err.suggestions : []);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -125,7 +131,24 @@ export function BlastRadiusView({
         )}
       </div>
 
-      {error && <div className="error">{error}</div>}
+      {error && (
+        <div className="error" style={{ marginBottom: 16 }}>
+          {error}
+          {suggestions.length > 0 && (
+            /* A dead end here is the most likely way a first-time reader
+               concludes the tool is broken, when the graph is fine and they
+               simply left off the `npm:` prefix. */
+            <div className="suggestions">
+              <span>did you mean</span>
+              {suggestions.map((key) => (
+                <button key={key} className="pill" onClick={() => onPickSuggestion?.(key)}>
+                  {key}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {report?.truncated && (
         <div className="error" style={{ marginBottom: 16 }}>
           The traversal returned exactly its path budget ({report.pathCountUsed}); this report may be

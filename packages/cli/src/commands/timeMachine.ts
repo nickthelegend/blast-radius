@@ -1,6 +1,6 @@
 import { blastRadius, findVersion, timeMachine, type TimeMachineReport } from '@blast/core';
 
-import { createContext, fail, parseInstant } from '../context.js';
+import { createContext, fail, parseInstant, requireVersion } from '../context.js';
 import {
   bold,
   clock,
@@ -29,8 +29,7 @@ export async function timeMachineCommand(
 ): Promise<void> {
   const { config, client } = createContext();
 
-  const version = await findVersion(client, versionKey);
-  if (!version) fail(`version not found in the graph: ${versionKey}`);
+  const version = await requireVersion(client, versionKey);
 
   const from = options.from ? parseInstant(options.from, '--from') : undefined;
   const to = options.to ? parseInstant(options.to, '--to') : undefined;

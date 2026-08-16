@@ -251,3 +251,66 @@ export async function graphStats(client: HydraClient): Promise<GraphStats> {
     similarEdges,
   };
 }
+
+/**
+ * What the user probably meant, when a version key is not in the graph.
+ *
+ * A mistyped or wrongly-formatted key is the single most likely thing anyone
+ * gets wrong here — the format is `ecosystem:package@version` and nothing about
+ * `debug@4.4.3` announces that the `npm:` prefix is required. Answering "not
+ * found" and stopping makes the tool feel broken when the graph is fine.
+ *
+ * Three cheap passes, in order of how likely each is to be the real intent:
+ * the same key with an ecosystem prefix added, other versions of that package,
+ * and finally a prefix search on the package name.
+ */
+export async function suggestVersions(
+  client: HydraClient,
+  key: string,
+  limit = 6,
+): Promise<string[]> {
+  const suggestions: string[] = [];
+  const add = (value: CellValue | undefined) => {
+    const text = asString(value);
+    if (text && !suggestions.includes(text)) suggestions.push(text);
+  };
+
+  // 1. The key is right but the ecosystem prefix is missing.
+  if (!key.includes(':')) {
+    for (const ecosystem of ['npm', 'pypi']) {
+      const result = await client.query(
+        'MATCH (v:Version) WHERE v.key = $key RETURN v.key AS key LIMIT 1',
+        { parameters: { key: `${ecosystem}:${key}` } },
+      );
+      result.records.forEach((record) => add(record.key));
+    }
+  }
+
+  // 2. The package exists but that version does not.
+  const at = key.lastIndexOf('@');
+  const packageKey = at > 0 ? key.slice(0, at) : key;
+  for (const candidate of packageKey.includes(':')
+    ? [packageKey]
+    : [`npm:${packageKey}`, `pypi:${packageKey}`]) {
+    const result = await client.query(
+      'MATCH (v:Version) WHERE v.package_key = $pkg ' +
+        'RETURN v.key AS key, v.published_at AS published_at ORDER BY published_at DESC LIMIT $limit',
+      { parameters: { pkg: candidate, limit } },
+    );
+    result.records.forEach((record) => add(record.key));
+    if (suggestions.length >= limit) return suggestions.slice(0, limit);
+  }
+
+  // 3. Fall back to a prefix search on the bare package name.
+  const bare = packageKey.includes(':') ? packageKey.slice(packageKey.indexOf(':') + 1) : packageKey;
+  if (bare.length >= 2) {
+    const result = await client.query(
+      'MATCH (p:Package) WHERE p.name STARTS WITH $prefix ' +
+        'RETURN p.key AS key ORDER BY p.dependent_count DESC LIMIT $limit',
+      { parameters: { prefix: bare, limit } },
+    );
+    result.records.forEach((record) => add(record.key));
+  }
+
+  return suggestions.slice(0, limit);
+}

@@ -9,7 +9,7 @@ import {
   type BlastRadiusReport,
 } from '@blast/core';
 
-import { createContext, fail } from '../context.js';
+import { createContext, fail, requireVersion } from '../context.js';
 import { bold, cyan, dim, duration, green, iso, pad, red, wrapChain, yellow } from '../format.js';
 
 export interface ExposureOptions {
@@ -25,13 +25,7 @@ export interface ExposureOptions {
 export async function exposureCommand(versionKey: string, options: ExposureOptions): Promise<void> {
   const { config, client } = createContext();
 
-  const source = await findVersion(client, versionKey);
-  if (!source) {
-    fail(
-      `version not found in the graph: ${versionKey}\n` +
-        `Check it is loaded with \`blastradius stats\`, or load the graph with \`make demo\`.`,
-    );
-  }
+  const source = await requireVersion(client, versionKey);
 
   const maxDepth = options.depth ? Number(options.depth) : config.traversal.maxDepth;
   if (!Number.isFinite(maxDepth) || maxDepth < 1) fail(`--depth must be a positive integer`);

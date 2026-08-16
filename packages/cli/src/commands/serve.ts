@@ -16,6 +16,7 @@ import {
   listCompromisedVersions,
   listRepos,
   resolveRepoKeys,
+  suggestVersions,
   listVersionsOfPackage,
   maintainerWeb,
   markCompromised,
@@ -244,7 +245,12 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
       if (key === null) return;
       const version = await findVersion(client, key);
       if (!version) {
-        res.status(404).json({ error: `version not found: ${key}` });
+        // "Not found" alone makes the tool feel broken when the graph is fine
+        // and the caller simply omitted the `npm:` prefix.
+        res.status(404).json({
+          error: `version not found: ${key}`,
+          suggestions: await suggestVersions(client, key),
+        });
         return;
       }
 
@@ -295,7 +301,12 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
       if (key === null) return;
       const version = await findVersion(client, key);
       if (!version) {
-        res.status(404).json({ error: `version not found: ${key}` });
+        // "Not found" alone makes the tool feel broken when the graph is fine
+        // and the caller simply omitted the `npm:` prefix.
+        res.status(404).json({
+          error: `version not found: ${key}`,
+          suggestions: await suggestVersions(client, key),
+        });
         return;
       }
       const depth = req.query.depth ? Number(req.query.depth) : config.traversal.maxDepth;
@@ -371,7 +382,12 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
       if (key === null) return;
       const version = await findVersion(client, key);
       if (!version) {
-        res.status(404).json({ error: `version not found: ${key}` });
+        // "Not found" alone makes the tool feel broken when the graph is fine
+        // and the caller simply omitted the `npm:` prefix.
+        res.status(404).json({
+          error: `version not found: ${key}`,
+          suggestions: await suggestVersions(client, key),
+        });
         return;
       }
       const from = req.query.from ? Number(req.query.from) : undefined;
@@ -400,7 +416,12 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
       if (key === null) return;
       const version = await findVersion(client, key);
       if (!version) {
-        res.status(404).json({ error: `version not found: ${key}` });
+        // "Not found" alone makes the tool feel broken when the graph is fine
+        // and the caller simply omitted the `npm:` prefix.
+        res.status(404).json({
+          error: `version not found: ${key}`,
+          suggestions: await suggestVersions(client, key),
+        });
         return;
       }
       const instant = Number(req.query.at ?? Date.now());
@@ -420,7 +441,12 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
       if (key === null) return;
       const version = await findVersion(client, key);
       if (!version) {
-        res.status(404).json({ error: `version not found: ${key}` });
+        // "Not found" alone makes the tool feel broken when the graph is fine
+        // and the caller simply omitted the `npm:` prefix.
+        res.status(404).json({
+          error: `version not found: ${key}`,
+          suggestions: await suggestVersions(client, key),
+        });
         return;
       }
       const options = { ...traversal(), consistency: consistencyFor(req) };

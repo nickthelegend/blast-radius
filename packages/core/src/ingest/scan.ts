@@ -358,3 +358,75 @@ async function currentSnapshotOf(
   const key = result.records[0]?.key;
   return typeof key === 'string' ? { key } : null;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Forget a repository                                                        */
+/* -------------------------------------------------------------------------- */
+
+export interface ForgetResult {
+  repoKey: string;
+  repoName: string;
+  snapshotsDeleted: number;
+  /** True when the repository was not in the graph to begin with. */
+  missing: boolean;
+}
+
+/**
+ * Remove a scanned repository and its entire lockfile history.
+ *
+ * `scan` is append-only by design — re-scanning supersedes rather than
+ * overwrites, because the superseded snapshots are exactly what the Time
+ * Machine reads. That is right for history and wrong for mistakes: a repo
+ * scanned under the wrong name, or a throwaway scan during testing, had no way
+ * out short of resetting the whole graph and reloading it.
+ *
+ * Only `Repo` and its `LockfileSnapshot` nodes are removed. Packages and
+ * versions are deliberately left alone: they are shared registry facts, not
+ * this repository's property, and deleting them would silently corrupt every
+ * other repo's chains.
+ */
+export async function forgetRepo(
+  client: HydraClient,
+  repoKeyOrName: string,
+  orgKey: string,
+): Promise<ForgetResult> {
+  const key = repoKeyOrName.includes('/') ? repoKeyOrName : `${orgKey}/${repoKeyOrName}`;
+
+  const found = await client.query(
+    'MATCH (r:Repo) WHERE r.key = $key RETURN r.id AS id, r.name AS name LIMIT 1',
+    { parameters: { key } },
+  );
+  const repo = found.records[0];
+  if (!repo) {
+    return { repoKey: key, repoName: '', snapshotsDeleted: 0, missing: true };
+  }
+
+  const snapshots = await client.query(
+    'MATCH (s:LockfileSnapshot) WHERE s.repo_key = $key RETURN s.id AS id',
+    { parameters: { key } },
+  );
+  const ids = snapshots.records
+    .map((record) => record.id)
+    .filter((id): id is number => typeof id === 'number');
+
+  // DETACH DELETE takes the RESOLVED / RESOLVED_DIRECT / HAS_SNAPSHOT edges with
+  // each node, so no orphaned relationship is left pointing at a deleted vertex.
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    await client.query('UNWIND $rows AS row MATCH (n {id: row.vertex}) DETACH DELETE n', {
+      parameters: { rows: ids.slice(offset, offset + 100).map((vertex) => ({ vertex })) },
+      timeoutMs: 120_000,
+    });
+  }
+
+  await client.query('MATCH (n {id: $id}) DETACH DELETE n', {
+    parameters: { id: repo.id },
+    timeoutMs: 120_000,
+  });
+
+  return {
+    repoKey: key,
+    repoName: typeof repo.name === 'string' ? repo.name : '',
+    snapshotsDeleted: ids.length,
+    missing: false,
+  };
+}

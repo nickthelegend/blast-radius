@@ -26,7 +26,7 @@ import {
   sbomCommand,
   whyCommand,
 } from './commands/insights.js';
-import { inspectLockfileCommand, scanCommand } from './commands/scan.js';
+import { forgetCommand, inspectLockfileCommand, scanCommand } from './commands/scan.js';
 import { maintainersCommand } from './commands/maintainers.js';
 import { remediateCommand } from './commands/remediate.js';
 import { serveCommand } from './commands/serve.js';
@@ -251,6 +251,13 @@ program
   .option('--at <instant>', 'override the capture instant (defaults to lockfile mtime)')
   .option('--json', 'emit JSON')
   .action(scanCommand);
+
+program
+  .command('forget')
+  .description('remove a scanned repository and its lockfile history')
+  .argument('<repo>', 'repository name or key')
+  .option('--json', 'emit JSON')
+  .action(forgetCommand);
 
 program
   .command('inspect-lockfile')

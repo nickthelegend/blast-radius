@@ -45,6 +45,9 @@ export function App(): JSX.Element {
   const [paletteOpen, setPaletteOpen] = useState(false);
   /** Set when a panel asks to show its query; the console opens pre-filled. */
   const [consoleQuery, setConsoleQuery] = useState<string | undefined>(undefined);
+  /** Live counts on the sheet index, so the tab bar reads as a status board. */
+  const [counts, setCounts] = useState<{ exposed: number; suspicious: number } | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   useEffect(() => {
     api
@@ -77,12 +80,56 @@ export function App(): JSX.Element {
     window.history.replaceState(null, '', `?${params.toString()}`);
   }, [tab, versionKey]);
 
-  // ⌘K / Ctrl+K anywhere, and ? for the shortcut list.
+  // The tab bar carries the two counts a responder actually scans for, so the
+  // headline numbers are visible before anything is clicked.
+  useEffect(() => {
+    if (!versionKey) return;
+    let cancelled = false;
+    Promise.all([api.exposure(versionKey, {}), api.typosquats()])
+      .then(([exposure, typo]) => {
+        if (cancelled) return;
+        setCounts({
+          exposed: exposure.exposedRepos.length,
+          suspicious: typo.findings.filter((f) => f.verdict === 'SUSPICIOUS').length,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setCounts(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [versionKey]);
+
+  // ⌘K / Ctrl+K anywhere, number keys for direct tab access, ? for the list.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const typing =
+        event.target instanceof HTMLElement &&
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName);
+
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setPaletteOpen((open) => !open);
+        return;
+      }
+      // Bare keys only outside a field, or typing "1" into the version box would
+      // navigate away mid-edit.
+      if (typing || event.metaKey || event.ctrlKey || event.altKey) return;
+
+      if (event.key === '?') {
+        event.preventDefault();
+        setShortcutsOpen((open) => !open);
+        return;
+      }
+      if (event.key === 'Escape') {
+        setShortcutsOpen(false);
+        return;
+      }
+      const index = Number(event.key);
+      if (Number.isInteger(index) && index >= 1 && index <= TABS.length) {
+        event.preventDefault();
+        setTab(TABS[index - 1]!.id);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -166,18 +213,66 @@ export function App(): JSX.Element {
           </button>
         </div>
         <nav className="tabs" aria-label="Sheets">
-          {TABS.map((entry) => (
-            <button
-              key={entry.id}
-              className={tab === entry.id ? 'active' : ''}
-              aria-current={tab === entry.id ? 'page' : undefined}
-              onClick={() => setTab(entry.id)}
-            >
-              {entry.label}
-            </button>
-          ))}
+          {TABS.map((entry, index) => {
+            // Only two sheets carry a count, and both are counts a responder is
+            // already looking for. A badge on every tab would be noise.
+            const badge =
+              entry.id === 'blast' ? counts?.exposed : entry.id === 'typosquats' ? counts?.suspicious : undefined;
+            return (
+              <button
+                key={entry.id}
+                className={tab === entry.id ? 'active' : ''}
+                aria-current={tab === entry.id ? 'page' : undefined}
+                onClick={() => setTab(entry.id)}
+                title={`${entry.label}  (press ${index + 1})`}
+              >
+                {entry.label}
+                {badge !== undefined && badge > 0 && (
+                  <span className={`tab-badge${entry.id === 'blast' ? ' danger' : ' warn'}`}>
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </nav>
       </header>
+
+      {shortcutsOpen && (
+        <div className="palette-backdrop" onMouseDown={() => setShortcutsOpen(false)}>
+          <div className="shortcuts" onMouseDown={(event) => event.stopPropagation()}>
+            <h2>Keyboard</h2>
+            <dl>
+              {TABS.map((entry, index) => (
+                <div key={entry.id}>
+                  <dt>
+                    <kbd>{index + 1}</kbd>
+                  </dt>
+                  <dd>{entry.label}</dd>
+                </div>
+              ))}
+              <div>
+                <dt>
+                  <kbd>⌘K</kbd>
+                </dt>
+                <dd>search packages, repos and views</dd>
+              </div>
+              <div>
+                <dt>
+                  <kbd>⌘↵</kbd>
+                </dt>
+                <dd>run the query, in the console</dd>
+              </div>
+              <div>
+                <dt>
+                  <kbd>?</kbd>
+                </dt>
+                <dd>this list</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      )}
 
       <CommandPalette
         open={paletteOpen}
@@ -245,7 +340,12 @@ export function App(): JSX.Element {
         )}
 
         {tab === 'blast' && versionKey && (
-          <BlastRadiusView versionKey={versionKey} repos={stats?.repos ?? []} onShowQuery={openInConsole} />
+          <BlastRadiusView
+            versionKey={versionKey}
+            repos={stats?.repos ?? []}
+            onShowQuery={openInConsole}
+            onPickSuggestion={selectVersion}
+          />
         )}
         {tab === 'time' && versionKey && (
           <TimeMachineView versionKey={versionKey} onShowQuery={openInConsole} />

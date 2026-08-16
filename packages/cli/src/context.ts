@@ -4,8 +4,10 @@ import {
   HydraClient,
   IdRegistry,
   ID_MAP_FILE,
+  findVersion,
   loadConfig,
   hydraConfigFrom,
+  suggestVersions,
   type BlastConfig,
 } from '@blast/core';
 
@@ -28,6 +30,29 @@ export function createContext(): Context {
 export function fail(message: string): never {
   process.stderr.write(`${message}\n`);
   process.exit(1);
+}
+
+/**
+ * Resolve a version key, or exit naming what the user probably meant.
+ *
+ * The key format is `ecosystem:package@version`, and nothing about typing
+ * `debug@4.4.3` announces that the `npm:` prefix is required. Failing with a
+ * bare "not found" makes the tool look broken when the graph is fine.
+ */
+export async function requireVersion(
+  client: HydraClient,
+  key: string,
+): Promise<NonNullable<Awaited<ReturnType<typeof findVersion>>>> {
+  const version = await findVersion(client, key);
+  if (version) return version;
+
+  const suggestions = await suggestVersions(client, key);
+  fail(
+    `version not found in the graph: ${key}` +
+      (suggestions.length > 0
+        ? `\n\nDid you mean:\n${suggestions.map((s) => `  ${s}`).join('\n')}`
+        : '\n\nKeys look like `npm:debug@4.4.3`. Try `blastradius stats` for what is loaded.'),
+  );
 }
 
 /**

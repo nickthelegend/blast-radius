@@ -1,6 +1,13 @@
 import { resolve } from 'node:path';
 
-import { blastRadius, findVersion, listCompromisedVersions, scanRepository } from '@blast/core';
+import {
+  blastRadius,
+  findVersion,
+  forgetRepo,
+  listCompromisedVersions,
+  listRepos,
+  scanRepository,
+} from '@blast/core';
 
 import { createContext, fail, parseInstant } from '../context.js';
 import { bold, cyan, dim, duration, green, iso, pad, red, yellow } from '../format.js';
@@ -154,4 +161,42 @@ export async function inspectLockfileCommand(directory: string | undefined): Pro
     }
     if (multiple.length > 15) out.write(dim(`  … and ${multiple.length - 15} more\n`));
   }
+}
+
+
+/**
+ * `blastradius forget <repo>` — remove a scanned repository.
+ *
+ * Destructive and scoped: it takes the repository and its lockfile snapshots,
+ * and deliberately leaves every package and version alone. Those are shared
+ * registry facts that other repositories' chains depend on.
+ */
+export async function forgetCommand(
+  repo: string,
+  options: { json?: boolean } = {},
+): Promise<void> {
+  const { config, client } = createContext();
+  const result = await forgetRepo(client, repo, config.org.name);
+
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (result.missing) process.exitCode = 1;
+    return;
+  }
+
+  if (result.missing) {
+    const available = (await listRepos(client, config.org.name)).map((entry) => entry.name);
+    process.stderr.write(
+      `not in the graph: ${repo}\n` +
+        `Known repositories: ${available.join(', ')}\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  process.stdout.write(
+    `forgot ${result.repoName} — removed the repository and ` +
+      `${result.snapshotsDeleted} lockfile snapshot(s).\n` +
+      'Packages and versions were left in place; they are shared with other repositories.\n',
+  );
 }

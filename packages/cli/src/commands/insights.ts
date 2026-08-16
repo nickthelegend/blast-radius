@@ -17,7 +17,7 @@ import {
   timeMachine,
 } from '@blast/core';
 
-import { createContext, fail } from '../context.js';
+import { createContext, fail, requireVersion } from '../context.js';
 import { bar, bold, cyan, dim, duration, green, iso, pad, red, yellow } from '../format.js';
 
 const traversalFrom = (config: ReturnType<typeof createContext>['config'], depth?: string) => ({
@@ -32,8 +32,7 @@ export async function prioritiseCommand(
   options: { json?: boolean; depth?: string },
 ): Promise<void> {
   const { config, client } = createContext();
-  const version = await findVersion(client, versionKey);
-  if (!version) fail(`version not found in the graph: ${versionKey}`);
+  const version = await requireVersion(client, versionKey);
 
   const report = await prioritiseExposure(client, version, traversalFrom(config, options.depth));
   if (options.json) {
@@ -247,8 +246,7 @@ export async function reportCommand(
   options: { out?: string; depth?: string },
 ): Promise<void> {
   const { config, client } = createContext();
-  const version = await findVersion(client, versionKey);
-  if (!version) fail(`version not found in the graph: ${versionKey}`);
+  const version = await requireVersion(client, versionKey);
 
   const traversal = traversalFrom(config, options.depth);
   const blast = await blastRadius(client, version, traversal);
@@ -283,8 +281,7 @@ export async function graphExportCommand(
   options: { out?: string; depth?: string },
 ): Promise<void> {
   const { config, client } = createContext();
-  const version = await findVersion(client, versionKey);
-  if (!version) fail(`version not found in the graph: ${versionKey}`);
+  const version = await requireVersion(client, versionKey);
 
   const report = await blastRadius(client, version, traversalFrom(config, options.depth));
   const dot = renderDot(report);

@@ -1,6 +1,6 @@
 import { exposureDiff, findVersion } from '@blast/core';
 
-import { createContext, fail, parseInstant } from '../context.js';
+import { createContext, fail, parseInstant, requireVersion } from '../context.js';
 import { bold, cyan, dim, duration, green, iso, pad, red, yellow } from '../format.js';
 
 export interface DiffOptions {
@@ -20,8 +20,7 @@ export interface DiffOptions {
 export async function diffCommand(versionKey: string, options: DiffOptions): Promise<void> {
   const { client } = createContext();
 
-  const version = await findVersion(client, versionKey);
-  if (!version) fail(`version not found in the graph: ${versionKey}`);
+  const version = await requireVersion(client, versionKey);
 
   // Default to the compromise window itself, which is the comparison that
   // answers "did we actually clean up after the incident".

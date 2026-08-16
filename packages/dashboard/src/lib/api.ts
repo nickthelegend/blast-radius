@@ -242,6 +242,17 @@ export interface AdvisoryView {
   published: number; affectedCount: number; exposedRepos: string[];
 }
 
+/** An API error that carried near-matches the caller probably meant. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly suggestions: string[] = [],
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 /**
  * A request that never reached the server.
  *
@@ -270,11 +281,13 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   const text = await response.text();
   if (!response.ok) {
     let message = text.slice(0, 300);
+    let suggestions: string[] = [];
     try {
-      const parsed = JSON.parse(text) as { error?: string };
+      const parsed = JSON.parse(text) as { error?: string; suggestions?: string[] };
       if (parsed.error) message = parsed.error;
+      if (Array.isArray(parsed.suggestions)) suggestions = parsed.suggestions;
     } catch { /* keep raw */ }
-    throw new Error(message);
+    throw new ApiError(message, suggestions);
   }
   return JSON.parse(text) as T;
 }
@@ -284,13 +297,15 @@ async function get<T>(path: string): Promise<T> {
   const text = await response.text();
   if (!response.ok) {
     let message = text.slice(0, 300);
+    let suggestions: string[] = [];
     try {
-      const parsed = JSON.parse(text) as { error?: string };
+      const parsed = JSON.parse(text) as { error?: string; suggestions?: string[] };
       if (parsed.error) message = parsed.error;
+      if (Array.isArray(parsed.suggestions)) suggestions = parsed.suggestions;
     } catch {
       /* keep raw */
     }
-    throw new Error(message);
+    throw new ApiError(message, suggestions);
   }
   return JSON.parse(text) as T;
 }

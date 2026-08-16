@@ -6,7 +6,7 @@ import {
   type RemediationPlan,
 } from '@blast/core';
 
-import { createContext, fail } from '../context.js';
+import { createContext, fail, requireVersion } from '../context.js';
 import { bold, cyan, dim, duration, green, pad, red, yellow } from '../format.js';
 
 export interface RemediateOptions {
@@ -22,8 +22,7 @@ export async function remediateCommand(
 ): Promise<void> {
   const { config, client } = createContext();
 
-  const source = await findVersion(client, versionKey);
-  if (!source) fail(`version not found in the graph: ${versionKey}`);
+  const source = await requireVersion(client, versionKey);
 
   const maxDepth = options.depth ? Number(options.depth) : config.traversal.maxDepth;
   const traversal = {

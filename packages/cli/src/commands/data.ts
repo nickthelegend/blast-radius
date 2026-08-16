@@ -17,7 +17,7 @@ import {
   verifyEngineCapabilities,
 } from '@blast/core';
 
-import { createContext, fail, parseInstant } from '../context.js';
+import { createContext, fail, parseInstant, requireVersion } from '../context.js';
 import { bold, cyan, dim, duration, green, iso, pad, red, yellow } from '../format.js';
 
 export async function loadCommand(options: { reset?: boolean; chunk?: string }): Promise<void> {
@@ -214,8 +214,7 @@ export async function markCompromisedCommand(
 ): Promise<void> {
   const { client } = createContext();
 
-  const version = await findVersion(client, versionKey);
-  if (!version) fail(`version not found in the graph: ${versionKey}`);
+  const version = await requireVersion(client, versionKey);
 
   if (options.clear) {
     await clearCompromised(client, [version.id]);

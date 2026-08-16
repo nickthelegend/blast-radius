@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { api, type StatsResponse } from './lib/api.js';
+import { SheetBoundary } from './components/SheetBoundary.js';
 import { AdvisoryView } from './views/AdvisoryView.js';
 import { AttackClockView } from './views/AttackClockView.js';
 import { BlastRadiusView } from './views/BlastRadiusView.js';
@@ -350,34 +351,38 @@ export function App(): JSX.Element {
           </div>
         )}
 
-        {tab === 'blast' && versionKey && (
-          <BlastRadiusView
-            versionKey={versionKey}
-            repos={stats?.repos ?? []}
-            onShowQuery={openInConsole}
-            onPickSuggestion={selectVersion}
-          />
-        )}
-        {tab === 'time' && versionKey && (
-          <TimeMachineView versionKey={versionKey} onShowQuery={openInConsole} />
-        )}
-        {tab === 'remediate' && versionKey && (
-          <RemediationView versionKey={versionKey} onShowQuery={openInConsole} />
-        )}
-        {tab === 'maintainers' && versionKey && <MaintainerView packageKey={packageKey} />}
-        {tab === 'advisories' && <AdvisoryView />}
-        {tab === 'typosquats' && <TyposquatView />}
-        {tab === 'console' && (
-          <ConsoleView seedVersionKey={versionKey} initialQuery={consoleQuery} />
-        )}
-        {tab === 'clock' && (
-          <AttackClockView
-            onSeedChange={(key) => {
-              setVersionKey(key);
-              setInput(key);
-            }}
-          />
-        )}
+        {/* Each sheet renders inside its own boundary: a throw in one must not
+            unmount the navigation and the other seven with it. */}
+        <SheetBoundary sheet={TABS.find((entry) => entry.id === tab)?.label ?? tab} key={tab}>
+          {tab === 'blast' && versionKey && (
+            <BlastRadiusView
+              versionKey={versionKey}
+              repos={stats?.repos ?? []}
+              onShowQuery={openInConsole}
+              onPickSuggestion={selectVersion}
+            />
+          )}
+          {tab === 'time' && versionKey && (
+            <TimeMachineView versionKey={versionKey} onShowQuery={openInConsole} />
+          )}
+          {tab === 'remediate' && versionKey && (
+            <RemediationView versionKey={versionKey} onShowQuery={openInConsole} />
+          )}
+          {tab === 'maintainers' && versionKey && <MaintainerView packageKey={packageKey} />}
+          {tab === 'advisories' && <AdvisoryView />}
+          {tab === 'typosquats' && <TyposquatView />}
+          {tab === 'console' && (
+            <ConsoleView seedVersionKey={versionKey} initialQuery={consoleQuery} />
+          )}
+          {tab === 'clock' && (
+            <AttackClockView
+              onSeedChange={(key) => {
+                setVersionKey(key);
+                setInput(key);
+              }}
+            />
+          )}
+        </SheetBoundary>
       </main>
     </div>
   );

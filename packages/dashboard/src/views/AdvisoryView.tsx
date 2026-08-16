@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Conditions } from '../components/Conditions.js';
+import { CopyTable } from '../components/CopyTable.js';
 import { Plotting } from '../components/Plotting.js';
 import { api, fmtDate, fmtMs, type AdvisoryView as Advisory } from '../lib/api.js';
 
@@ -30,6 +31,7 @@ export function AdvisoryView(): JSX.Element {
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [onlyReaching, setOnlyReaching] = useState(true);
+  const tableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,8 +108,13 @@ export function AdvisoryView(): JSX.Element {
         </div>
       </div>
 
-      <div className="panel">
-        <h2>Advisories</h2>
+      <div className="panel" ref={tableRef}>
+        <h2>
+          Advisories
+          {sorted.length > 0 && (
+            <CopyTable targetRef={tableRef} caption="Known vulnerabilities, in both tenses" />
+          )}
+        </h2>
         {sorted.length === 0 && <div className="empty">Nothing in this filter.</div>}
         {sorted.length > 0 && (
           <table className="advisory-table">

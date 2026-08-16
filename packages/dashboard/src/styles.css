@@ -1339,3 +1339,27 @@ tbody tr.row-selected td:first-child { color: var(--ink); }
 /* The advisories explainer runs the full sheet width, well past a comfortable
    measure. Every other explanatory block is capped; this one was not. */
 .summary-cell { max-width: 56ch; }
+
+/* Table hand-off. Sits in the sheet title block, at the far end of the rule. */
+.copy-table {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.copy-table button {
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  color: var(--ink-3);
+  font-family: var(--cond);
+  font-size: var(--t);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: color 110ms linear, border-color 110ms linear;
+}
+.copy-table button:hover { color: var(--ink); border-color: var(--rule-lit); }

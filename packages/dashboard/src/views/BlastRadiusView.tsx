@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ForceGraph } from '../components/ForceGraph.js';
 import { Conditions } from '../components/Conditions.js';
+import { CopyTable } from '../components/CopyTable.js';
 import { ApiError } from '../lib/api.js';
 import { QueryLink } from '../components/QueryLink.js';
 import { Plotting } from '../components/Plotting.js';
@@ -46,6 +47,7 @@ export function BlastRadiusView({
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<ExposedRepo | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const exposedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!versionKey) return;
@@ -157,8 +159,13 @@ export function BlastRadiusView({
       )}
 
       <div className="grid-2">
-        <div className="panel">
-          <h2>Currently exposed</h2>
+        <div className="panel" ref={exposedRef}>
+          <h2>
+            Currently exposed
+            {report && report.exposedRepos.length > 0 && (
+              <CopyTable targetRef={exposedRef} caption={`Exposed by ${versionKey}`} />
+            )}
+          </h2>
           <p className="sub">
             Repos whose <b>current</b> lockfile resolves this exact version. Click a row to isolate
             its path in the graph.

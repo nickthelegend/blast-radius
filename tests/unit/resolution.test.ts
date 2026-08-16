@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { isAffected, resolveRange } from '../../packages/core/src/ingest/build.js';
+import { parsePypiAuthor } from '../../packages/core/src/ingest/registry.js';
 import { buildVersionTimeline } from '../../packages/core/src/queries/blastRadius.js';
 import { mulberry32 } from '../../packages/core/src/ingest/org.js';
 import { parsePackageKey, parseVersionKey } from '../../packages/core/src/model/types.js';
@@ -157,5 +158,34 @@ describe('mulberry32 — deterministic org generation', () => {
       expect(value).toBeGreaterThanOrEqual(0);
       expect(value).toBeLessThan(1);
     }
+  });
+});
+
+describe('parsePypiAuthor', () => {
+  it('separates a name from an angle-bracketed address', () => {
+    // PyPI's author field is free text; splitting on "@" would yield
+    // "Kenneth Reitz <me", which is what this replaced.
+    const parsed = parsePypiAuthor('Kenneth Reitz <me@kennethreitz.org>');
+    expect(parsed.username).toBe('Kenneth Reitz');
+    expect(parsed.emailHash).toHaveLength(16);
+  });
+
+  it('uses the local part when only an address is given', () => {
+    expect(parsePypiAuthor('plain@example.org').username).toBe('plain');
+  });
+
+  it('keeps a bare name and hashes nothing', () => {
+    const parsed = parsePypiAuthor('Just A Name');
+    expect(parsed.username).toBe('Just A Name');
+    expect(parsed.emailHash).toBe('');
+  });
+
+  it('never returns an empty username', () => {
+    expect(parsePypiAuthor('   ').username).toBe('unknown');
+  });
+
+  it('never retains a raw email address', () => {
+    const parsed = parsePypiAuthor('A B <secret@example.org>');
+    expect(JSON.stringify(parsed)).not.toContain('secret@example.org');
   });
 });

@@ -308,15 +308,13 @@ export class RegistryClient {
     const kept = versions.slice(0, this.options.maxVersionsPerPackage);
     for (const version of kept) version.dependencies = dependencies;
 
-    const author = raw.info?.author_email ?? raw.info?.author ?? '';
+    const author = raw.info?.author ?? raw.info?.author_email ?? '';
     const reduced: ReducedPackument = {
       name,
       latest: raw.info?.version ?? kept[0]?.version ?? '',
       createdAt: versions.length ? Math.min(...versions.map((v) => v.publishedAt || Infinity)) : 0,
       modifiedAt: versions[0]?.publishedAt ?? 0,
-      maintainers: author
-        ? [{ username: String(author).split('@')[0] ?? 'unknown', emailHash: hashEmail(String(author)) }]
-        : [],
+      maintainers: author ? [parsePypiAuthor(String(author))] : [],
       versions: kept,
     };
     this.writeCache('pypi', name, reduced);
@@ -362,6 +360,32 @@ interface RawOsvResponse {
 interface RawPypiProject {
   info?: { version?: string; requires_dist?: string[]; author?: string; author_email?: string };
   releases?: Record<string, Array<{ upload_time_iso_8601?: string; yanked?: boolean }> | undefined>;
+}
+
+/**
+ * PyPI puts the author in one free-text field, in any of several shapes:
+ *   "Kenneth Reitz"
+ *   "Kenneth Reitz <me@example.org>"
+ *   "me@example.org"
+ * Splitting naively on "@" turns the second form into "Kenneth Reitz <me",
+ * so the name and the address are separated properly and only the address is
+ * hashed.
+ */
+export function parsePypiAuthor(value: string): { username: string; emailHash: string } {
+  const trimmed = value.trim();
+  const angled = /^(.*?)\s*<([^>]+)>\s*$/.exec(trimmed);
+  if (angled) {
+    const name = (angled[1] ?? '').trim();
+    const email = (angled[2] ?? '').trim();
+    return {
+      username: name || (email.split('@')[0] ?? 'unknown'),
+      emailHash: hashEmail(email),
+    };
+  }
+  if (trimmed.includes('@')) {
+    return { username: trimmed.split('@')[0] ?? 'unknown', emailHash: hashEmail(trimmed) };
+  }
+  return { username: trimmed || 'unknown', emailHash: '' };
 }
 
 /** Registry emails are public, but they are still PII. Only a truncated digest

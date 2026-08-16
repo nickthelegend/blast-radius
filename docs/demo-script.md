@@ -7,6 +7,7 @@ working after `make demo`.
 
 ```bash
 make demo          # clean DB, loaded graph, incident armed
+make install-cli   # so the terminal shows `blastradius …`, not a node path
 make serve         # dashboard on http://127.0.0.1:4000, leave running
 export NO_COLOR=   # keep terminal colour ON for the recording
 ```
@@ -207,3 +208,6 @@ End on the repo URL.
   it); a fresh volume restores millisecond queries.
 - Graph canvas blank → resize the browser window once; the layout measures on
   resize.
+- Dashboard shows empty tabs → it defaults to the recorded incident, so this
+  should not happen; if it does, the snapshot has no incident recorded — run
+  `make ingest`.

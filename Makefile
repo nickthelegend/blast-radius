@@ -19,6 +19,11 @@ build: install ## build every package
 	npx tsc -p packages/cli/tsconfig.json
 	npm run build -w @blast/dashboard
 
+.PHONY: install-cli
+install-cli: ## put `blastradius` on your PATH (npm link)
+	npm link
+	@echo "`blastradius` is now on your PATH — every README example runs verbatim."
+
 .PHONY: env
 env: ## create .env from .env.example if absent
 	@test -f .env || (cp .env.example .env && echo "created .env")
@@ -70,6 +75,9 @@ demo: env build db-reset load mark ## one command: fresh DB, loaded graph, incid
 	@echo "  make remediate  (what to change to fix it)"
 	@echo "  make scan       (scan this very repo's lockfile)"
 	@echo "  make serve      (dashboard on http://127.0.0.1:4000)"
+	@echo ""
+	@echo "For the bare \`blastradius\` command used in the README: make install-cli"
+	@echo "Otherwise prefix with ./bin/ — e.g. ./bin/blastradius exposure $(SEED)"
 
 .PHONY: mark
 mark: ## mark the demo incident compromised (09:00-09:06 window)

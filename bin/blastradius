@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+/**
+ * `blastradius` entry point.
+ *
+ * Exists so the command in the README is the command you actually run. Works
+ * three ways, in order of convenience:
+ *
+ *   npm link            -> `blastradius exposure …`     (on PATH)
+ *   npx blastradius     -> `npx blastradius exposure …`
+ *   ./bin/blastradius   -> straight from a clone, no install step
+ *
+ * It resolves the built CLI relative to this file, so it does not care what the
+ * working directory is.
+ */
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const entry = resolve(here, '../packages/cli/dist/index.js');
+
+if (!existsSync(entry)) {
+  process.stderr.write(
+    'blastradius: the CLI has not been built yet.\n' +
+      '  make build     (or: npm install && npm run build)\n',
+  );
+  process.exit(1);
+}
+
+await import(pathToFileURL(entry).href);

@@ -90,6 +90,17 @@ make serve          # dashboard on http://127.0.0.1:4000
 depends on, and connects a stock Neo4j driver over Bolt. Run it first if
 anything looks wrong.
 
+### The `blastradius` command
+
+Every example below is written as `blastradius …`. To make that literal:
+
+```bash
+make install-cli     # npm link — puts `blastradius` on your PATH
+```
+
+Without it, run `./bin/blastradius …` straight from the clone — same binary, no
+install step.
+
 To rebuild the graph from the live registry instead of the committed snapshot:
 
 ```bash
@@ -575,6 +586,8 @@ Concretely:
 ```
 
 ```
+bin/
+  blastradius  the CLI entry point (npm link, npx, or ./bin/blastradius)
 packages/
   core/        HydraDB client, model, ingestion, queries, simulation
   cli/         the `blastradius` command + the dashboard API server

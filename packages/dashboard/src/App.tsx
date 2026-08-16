@@ -31,12 +31,16 @@ export function App(): JSX.Element {
       .stats()
       .then((result) => {
         setStats(result);
-        // Default to whatever is currently marked compromised — after
-        // `make demo` that is the incident the whole dataset was built around.
-        const first = result.compromised[0];
-        if (first) {
-          setVersionKey(first.key);
-          setInput(first.key);
+        // Prefer the recorded incident. A simulation leaves dozens of
+        // propagated versions marked, most of which no lockfile pins — landing
+        // on one of those would show empty views on every tab.
+        const incidentKey = result.incident?.version_key;
+        const chosen =
+          (incidentKey && result.compromised.find((v) => v.key === incidentKey)) ??
+          result.compromised[0];
+        if (chosen) {
+          setVersionKey(chosen.key);
+          setInput(chosen.key);
         }
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
@@ -99,7 +103,7 @@ export function App(): JSX.Element {
               {stats && stats.compromised.length > 0 && (
                 <span className="muted" style={{ fontSize: 12.5 }}>
                   marked compromised:{' '}
-                  {stats.compromised.map((version) => (
+                  {stats.compromised.slice(0, 6).map((version) => (
                     <button
                       key={version.key}
                       className="pill danger"
@@ -112,6 +116,9 @@ export function App(): JSX.Element {
                       {version.key}
                     </button>
                   ))}
+                  {stats.compromised.length > 6 && (
+                    <span className="muted"> +{stats.compromised.length - 6} more</span>
+                  )}
                 </span>
               )}
             </div>

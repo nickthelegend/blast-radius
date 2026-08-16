@@ -169,9 +169,20 @@ export interface RemediationPlan {
   cypher: string;
 }
 
+export interface IncidentSeed {
+  scenario: string;
+  version_key: string;
+  package_key: string;
+  replacement_version_key: string;
+  from: number;
+  to: number;
+}
+
 export interface StatsResponse {
   stats: Record<string, number>;
+  /** Ordered so the recorded incident comes first. */
   compromised: VersionRef[];
+  incident: IncidentSeed | null;
   repos: Array<{ key: string; name: string; language: string; lockfileSource: string }>;
   org: string;
   simulatedNow: number;

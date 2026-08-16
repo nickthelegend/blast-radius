@@ -19,6 +19,8 @@ import {
   maintainerWeb,
   markCompromised,
   planRemediation,
+  readSnapshot,
+  snapshotExists,
   SCENARIOS,
   simulate,
   timeMachine,
@@ -77,9 +79,26 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
         listCompromisedVersions(client),
         listRepos(client, config.org.name),
       ]);
+      // The dashboard needs to know which of these is *the* incident. After a
+      // simulation, dozens of propagated versions are marked compromised, and
+      // most of them are packages no lockfile pins — landing on one of those
+      // renders every view empty. The recorded incident is the meaningful
+      // default, so it is surfaced here and floated to the front of the list.
+      const incident = snapshotExists(config.paths.snapshot)
+        ? readSnapshot(config.paths.snapshot).incident
+        : null;
+
+      const ordered = incident
+        ? [
+            ...compromised.filter((version) => version.key === incident.version_key),
+            ...compromised.filter((version) => version.key !== incident.version_key),
+          ]
+        : compromised;
+
       res.json({
         stats,
-        compromised,
+        compromised: ordered,
+        incident,
         repos,
         org: config.org.name,
         simulatedNow: config.org.simulatedNow,

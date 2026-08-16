@@ -27,7 +27,7 @@ export function CommandPalette({
   onClose: () => void;
   staticActions: PaletteAction[];
   onPickVersion: (versionKey: string) => void;
-  /** Live count from /api/stats — the placeholder should not quote a number the graph no longer holds. */
+  /** Live count from /api/stats — the prompt text should not quote a number the graph no longer holds. */
   versionCount?: number;
 }): JSX.Element | null {
   const [query, setQuery] = useState('');

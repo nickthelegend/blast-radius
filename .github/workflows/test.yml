@@ -34,10 +34,12 @@ jobs:
         run: npx vitest run tests/unit
       - name: No mocks, stubs or placeholders in shipped source
         run: |
-          # `placeholder="…"` is the HTML input attribute, not a stubbed value.
+          # `placeholder` is also real API surface — the HTML input attribute and
+          # the CSS `::placeholder` pseudo-element — so those spellings are
+          # excluded by shape rather than by weakening the rule itself.
           if grep -rniE '\b(todo|fixme|mock|stub|dummy|fake|placeholder)\b' \
                packages/core/src packages/cli/src packages/dashboard/src bin \
-             | grep -viE 'placeholder="|placeholder=\{|non-placeholder characters|not yet implemented by LocalFileSystem|does not implement them'; then
+             | grep -viE 'placeholder="|placeholder=\{|::placeholder|::-webkit-input-placeholder|non-placeholder characters|not yet implemented by LocalFileSystem|does not implement them'; then
             echo "::error::forbidden marker found in shipped source"
             exit 1
           fi

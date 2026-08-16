@@ -52,6 +52,39 @@ export function TimeMachineView({
     return { min: min - pad, max: max + pad };
   }, [data]);
 
+  /**
+   * Exposed-repository count at every instant the set changed.
+   *
+   * This is the bitemporal claim as a shape rather than a sentence: a static
+   * scanner has one data point, today. It is derived from the snapshots the
+   * timeline already fetched — every capture and every supersession is a step —
+   * so it costs no query at all.
+   */
+  const series = useMemo(() => {
+    if (!data) return [];
+    const events = new Set<number>();
+    for (const exposure of data.allExposures) {
+      events.add(exposure.capturedAt);
+      if (exposure.supersededAt) events.add(exposure.supersededAt);
+    }
+    return [...events]
+      .sort((a, b) => a - b)
+      .map((instant) => {
+        const live = new Set(
+          data.allExposures
+            .filter(
+              (exposure) =>
+                exposure.capturedAt <= instant &&
+                (exposure.supersededAt === 0 || exposure.supersededAt > instant),
+            )
+            .map((exposure) => exposure.repoName),
+        );
+        return { instant, count: live.size };
+      });
+  }, [data]);
+
+  const peak = useMemo(() => series.reduce((max, point) => Math.max(max, point.count), 0), [series]);
+
   useEffect(() => {
     if (scrub === null || !versionKey) return;
     let cancelled = false;
@@ -148,6 +181,31 @@ export function TimeMachineView({
                   {Math.round((timeMachine.windowTo - timeMachine.windowFrom) / 60_000)} min
                 </span>
               </div>
+              {/* The exposure count as a step line. Drawn first so the capture
+                  ticks sit on top of it rather than under it. */}
+              {peak > 0 && (
+                <svg className="timeline-series" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <polyline
+                    points={series
+                      .flatMap((point, index) => {
+                        const x = position(point.instant);
+                        const y = 100 - (point.count / peak) * 78;
+                        const previous = series[index - 1];
+                        // A step, not a slope: the count changes at an instant,
+                        // it does not drift between two of them.
+                        return previous
+                          ? [`${x},${100 - (previous.count / peak) * 78}`, `${x},${y}`]
+                          : [`${x},${y}`];
+                      })
+                      .join(' ')}
+                  />
+                </svg>
+              )}
+              {peak > 0 && (
+                <div className="series-peak">
+                  peak {peak} {peak === 1 ? 'repo' : 'repos'} exposed at once
+                </div>
+              )}
               {data.allExposures.map((exposure) => {
                 const inWindow =
                   exposure.capturedAt >= timeMachine.windowFrom &&

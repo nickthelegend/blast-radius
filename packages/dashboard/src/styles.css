@@ -1073,3 +1073,34 @@ main, .panel, .grid-2 > *, .row > * { min-width: 0; }
   cursor: pointer;
 }
 .graph-reset:hover { color: var(--ink); border-color: var(--rule-lit); }
+
+/* The exposure count over time, plotted on the same axis as the captures that
+   produced it. A static scanner has one point on this line: today. */
+.timeline-series {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.timeline-series polyline {
+  fill: none;
+  stroke: var(--buff);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.85;
+}
+/* Set on the left: the compromise-window callout owns the top-right, and the
+   two collided when the window sat late in the axis. */
+.series-peak {
+  position: absolute;
+  top: 5px;
+  left: 10px;
+  font-family: var(--cond);
+  font-size: var(--t);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--buff);
+  pointer-events: none;
+}

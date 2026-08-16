@@ -1054,3 +1054,22 @@ main, .panel, .grid-2 > *, .row > * { min-width: 0; }
 .typosquat-table th:nth-child(6),
 .typosquat-table td:nth-child(6) { width: 34%; }
 .typosquat-table td .reason { max-width: none; }
+
+/* The view control appears only once the plot has been moved off its datum. */
+.graph-reset {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: var(--ground);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  color: var(--ink-2);
+  font-family: var(--cond);
+  font-size: var(--t);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.graph-reset:hover { color: var(--ink); border-color: var(--rule-lit); }

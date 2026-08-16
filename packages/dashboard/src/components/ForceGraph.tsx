@@ -95,6 +95,13 @@ export function ForceGraph({
   /** Hovered node id, in a ref so the draw loop reads it without re-running
    *  the whole layout effect on every mouse move. */
   const hoverRef = useRef<number | null>(null);
+  /** Locked focus: a clicked node keeps its chain lit after the pointer leaves. */
+  const lockRef = useRef<number | null>(null);
+  /** Pan/zoom transform. A ref, not state — panning must not re-render React. */
+  const viewRef = useRef({ x: 0, y: 0, k: 1 });
+  const [transformed, setTransformed] = useState(false);
+  const [locked, setLocked] = useState<GraphNode | null>(null);
+  const resetViewRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -243,10 +250,23 @@ export function ForceGraph({
 
     const ringRadius = (depth: number): number => depth * band;
 
-    const draw = () => {
-      ctx.clearRect(0, 0, width, height);
+    /** Screen point -> graph point, so hit testing survives pan and zoom. */
+    const toGraph = (px: number, py: number): [number, number] => {
+      const view = viewRef.current;
+      return [(px - view.x) / view.k, (py - view.y) / view.k];
+    };
 
-      const focus = hoverRef.current;
+    const draw = () => {
+      const view = viewRef.current;
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      ctx.translate(view.x, view.y);
+      ctx.scale(view.k, view.k);
+
+      // A locked node outranks whatever the pointer is over, so the chain a
+      // presenter clicked stays lit while they point at the screen.
+      const focus = lockRef.current ?? hoverRef.current;
       const lit = focus !== null ? ancestryOf(focus) : null;
 
       // --- range rings: the survey's annuli, one per dependency hop ---------
@@ -423,6 +443,8 @@ export function ForceGraph({
         ctx.fillText(label.text, label.x, label.y);
         ctx.globalAlpha = 1;
       }
+
+      ctx.restore();
     };
 
     // The shockwave and hover state both need frames the simulation may not
@@ -440,8 +462,16 @@ export function ForceGraph({
 
     const handleMove = (event: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
-      const mx = event.clientX - rect.left;
-      const my = event.clientY - rect.top;
+      if (panFrom) {
+        const view = viewRef.current;
+        view.x = panFrom.viewX + (event.clientX - panFrom.screenX);
+        view.y = panFrom.viewY + (event.clientY - panFrom.screenY);
+        setTransformed(true);
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(animate);
+        return;
+      }
+      const [mx, my] = toGraph(event.clientX - rect.left, event.clientY - rect.top);
       let found: SimNode | null = null;
       for (const node of simNodes) {
         if (node.x === undefined) continue;
@@ -455,7 +485,7 @@ export function ForceGraph({
       const changed = hoverRef.current !== (found?.id ?? null);
       hoverRef.current = found?.id ?? null;
       setHovered(found);
-      canvas.style.cursor = found ? 'pointer' : 'default';
+      canvas.style.cursor = found ? 'pointer' : 'grab';
       if (changed) {
         cancelAnimationFrame(raf);
         raf = requestAnimationFrame(animate);
@@ -463,26 +493,100 @@ export function ForceGraph({
     };
 
     const handleClick = (event: MouseEvent) => {
+      // A click that ended a drag is a pan, not a selection.
+      if (dragged) {
+        dragged = false;
+        return;
+      }
       const rect = canvas.getBoundingClientRect();
-      const mx = event.clientX - rect.left;
-      const my = event.clientY - rect.top;
+      const [mx, my] = toGraph(event.clientX - rect.left, event.clientY - rect.top);
       for (const node of simNodes) {
         if (node.x === undefined) continue;
         const dx = node.x - mx;
         const dy = node.y! - my;
-        if (dx * dx + dy * dy < 100) {
+        if (dx * dx + dy * dy < 100 / (viewRef.current.k * viewRef.current.k)) {
+          // Clicking the locked node unlocks it; clicking another moves the lock.
+          lockRef.current = lockRef.current === node.id ? null : node.id;
+          setLocked(lockRef.current === null ? null : node);
           onSelect?.(node);
+          cancelAnimationFrame(raf);
+          raf = requestAnimationFrame(animate);
           return;
         }
       }
+      // A click on empty plot clears the lock — the way putting the pointer down
+      // on blank paper clears a selection anywhere else.
+      if (lockRef.current !== null) {
+        lockRef.current = null;
+        setLocked(null);
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(animate);
+      }
+    };
+
+    // --- pan and zoom -----------------------------------------------------
+    let panFrom: { screenX: number; screenY: number; viewX: number; viewY: number } | null = null;
+    let dragged = false;
+
+    const handleDown = (event: MouseEvent) => {
+      const view = viewRef.current;
+      panFrom = {
+        screenX: event.clientX,
+        screenY: event.clientY,
+        viewX: view.x,
+        viewY: view.y,
+      };
+      dragged = false;
+    };
+
+    const handleUp = (event: MouseEvent) => {
+      if (panFrom) {
+        const moved =
+          Math.abs(event.clientX - panFrom.screenX) + Math.abs(event.clientY - panFrom.screenY);
+        // Four pixels of slop, so a slightly shaky click is still a click.
+        dragged = moved > 4;
+      }
+      panFrom = null;
+      canvas.style.cursor = 'default';
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const px = event.clientX - rect.left;
+      const py = event.clientY - rect.top;
+      const view = viewRef.current;
+      // Zoom about the pointer, so the thing under the cursor stays under it.
+      const factor = Math.exp(-event.deltaY * 0.0016);
+      const next = Math.min(6, Math.max(0.35, view.k * factor));
+      const applied = next / view.k;
+      view.x = px - (px - view.x) * applied;
+      view.y = py - (py - view.y) * applied;
+      view.k = next;
+      setTransformed(true);
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(animate);
+    };
+
+    resetViewRef.current = () => {
+      viewRef.current = { x: 0, y: 0, k: 1 };
+      setTransformed(false);
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(animate);
     };
 
     canvas.addEventListener('mousemove', handleMove);
     canvas.addEventListener('click', handleClick);
+    canvas.addEventListener('mousedown', handleDown);
+    window.addEventListener('mouseup', handleUp);
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
       canvas.removeEventListener('mousemove', handleMove);
       canvas.removeEventListener('click', handleClick);
+      canvas.removeEventListener('mousedown', handleDown);
+      window.removeEventListener('mouseup', handleUp);
+      canvas.removeEventListener('wheel', handleWheel);
       cancelAnimationFrame(raf);
       simulation.stop();
     };
@@ -491,6 +595,15 @@ export function ForceGraph({
   return (
     <div className="graph-wrap">
       <canvas ref={canvasRef} />
+      {transformed && (
+        <button
+          className="graph-reset"
+          onClick={() => resetViewRef.current()}
+          title="Reset the view to the full plot"
+        >
+          reset view
+        </button>
+      )}
       <div className="graph-legend">
         <span>
           <i style={{ background: BLAST, transform: 'rotate(45deg)' }} />
@@ -509,7 +622,7 @@ export function ForceGraph({
           repo
         </span>
       </div>
-      {hovered && (
+      {(locked ?? hovered) && (
         <div
           style={{
             position: 'absolute',
@@ -524,9 +637,11 @@ export function ForceGraph({
             maxWidth: 380,
           }}
         >
-          <div style={{ color: INK }}>{hovered.name}</div>
-          <div style={{ color: INK_2 }}>{hovered.label}</div>
-          <div style={{ color: BUFF, marginTop: 5 }}>chain to ground zero struck out</div>
+          <div style={{ color: INK }}>{(locked ?? hovered)!.name}</div>
+          <div style={{ color: INK_2 }}>{(locked ?? hovered)!.label}</div>
+          <div style={{ color: BUFF, marginTop: 5 }}>
+            {locked ? 'chain locked — click again to release' : 'chain to ground zero struck out'}
+          </div>
         </div>
       )}
     </div>

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.DS_Store
+
+# Raw registry responses. Large, regenerable, and not worth versioning.
+data/cache/
+# Transient ingest progress log.
+data/ingest.log
+
+# The reduced, committed graph snapshot lives in data/snapshot/ and IS tracked.
+# Local HydraDB state:
+hydradb-data/

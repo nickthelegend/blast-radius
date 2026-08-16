@@ -1,0 +1,26 @@
+{
+  "name": "blast-radius",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Blast Radius — a live, queryable supply-chain attack graph built on HydraDB",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "workspaces": [
+    "packages/core",
+    "packages/cli",
+    "packages/dashboard"
+  ],
+  "scripts": {
+    "build": "npm run build -w @blast/core && npm run build -w @blast/cli && npm run build -w @blast/dashboard",
+    "typecheck": "tsc -b packages/core packages/cli --pretty",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "cli": "node --experimental-strip-types packages/cli/src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

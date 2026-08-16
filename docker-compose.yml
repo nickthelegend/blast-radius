@@ -1,0 +1,75 @@
+# HydraDB for local Blast Radius development.
+#
+# A named volume is used rather than a bind mount on purpose: the graph-node
+# image runs as uid 10001, and a host bind mount (especially on macOS, or on any
+# filesystem mounted `noowners`) leaves /data unwritable for that uid, so the
+# node dies with `Os { code: 13, kind: PermissionDenied }` immediately after
+# logging "starting graph node". The init service below fixes ownership and
+# seeds the auth token before graph-node ever starts.
+
+services:
+  hydradb-init:
+    image: ghcr.io/hydra-db/hydradb:latest
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mkdir -p /data/store /data/cache
+        if [ ! -s /data/auth-token ]; then
+          printf '%s\n' "${HYDRA_AUTH_TOKEN:-local-development-token-32-bytes}" > /data/auth-token
+        fi
+        chown -R 10001:10001 /data
+        echo "hydradb volume ready"
+    volumes:
+      - hydradb-data:/data
+
+  hydradb:
+    image: ghcr.io/hydra-db/hydradb:latest
+    container_name: blast-hydradb
+    depends_on:
+      hydradb-init:
+        condition: service_completed_successfully
+    ports:
+      - "7687:7687"   # Bolt (Neo4j-compatible)
+      - "8443:8443"   # HTTP JSON / NDJSON query API
+      - "9090:9090"   # admin: /healthz /readyz /metrics
+    volumes:
+      - hydradb-data:/data
+    environment:
+      CLOUD_PROVIDER: local
+      LOCAL_PATH: /data/store
+      GRAPH_NAMESPACE: default
+      GRAPH_ID: default
+      GRAPH_CELL_ID: cell-0
+      GRAPH_CELLS: cell-0
+      GRAPH_NODE_ID: node-0
+      GRAPH_BOLT_NODE_ADDRESSES: node-0=127.0.0.1:7687
+      GRAPH_ADVERTISED_BOLT_ADDR: 127.0.0.1:7687
+      GRAPH_DATA_CACHE_DIR: /data/cache
+      GRAPH_AUTH_TOKEN_FILE: /data/auth-token
+      GRAPH_ALLOW_PLAINTEXT: "true"
+      # graph-node recurses deeply while planning; the default 8MB stack aborts.
+      RUST_MIN_STACK: "33554432"
+      # Blast Radius traverses up to 10 hops (8 dependency + RESOLVED +
+      # HAS_SNAPSHOT). The engine default is 16, which is comfortably above it.
+      GRAPH_MAX_QUERY_RUNTIME_MS: "60000"
+      GRAPH_MAX_QUERY_SCAN_EDGES: "50000000"
+      # A path procedure returns whole paths, and every node in every path
+      # carries its full property map. A wide blast radius is therefore a large
+      # response: a thousand paths of ~10 nodes each runs to tens of megabytes,
+      # and the 64MB default trips admission control with
+      # "client_cursor_buffer_bytes ... exceeds limit". Raised here because the
+      # traversal is the product; the client also degrades gracefully if a
+      # deployment keeps the lower default.
+      GRAPH_MAX_CURSOR_BUFFER_BYTES: "536870912"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/graph-node", "--version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  hydradb-data:

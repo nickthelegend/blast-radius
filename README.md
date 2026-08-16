@@ -600,6 +600,29 @@ line** across every capture instant, peaking at eleven. That shape is the
 bitemporal claim made visible: a current-state scanner has exactly one point on
 that line, today.
 
+Click a **range ring** to filter the plot to that hop band — the ring lights and
+everything outside it drops to a trace, which is how you isolate the 91 packages
+one hop from ground zero out of 287.
+
+The two tables anyone actually quotes — exposed repositories, and advisories —
+hand themselves over as **Markdown or CSV**. The copy reads the rendered table,
+so what lands in the paste is exactly what was on screen, filter and all; if the
+clipboard is unavailable it says so rather than claiming a copy that never
+happened.
+
+**Keys 1–8** jump straight to a sheet, `⌘K` searches, and `?` lists the
+bindings. Digits typed into the version field do not navigate away mid-edit.
+
+Every sheet renders inside an **error boundary**: React unmounts the whole tree
+when a render throws, so without one a single bad panel would blank the
+navigation and the other seven sheets with it.
+
+And it **prints**. Ink inverts to paper, screen-only chrome drops out, table
+headers repeat across page breaks, sheets refuse to split mid-table, the plot is
+kept because it is the evidence, and the deep link is printed beside the
+wordmark so a paper copy says where it came from — because an incident write-up
+gets pasted into a document or handed to someone who was not at the screen.
+
 Press <kbd>⌘K</kbd> anywhere for the command palette; package search is a live
 `STARTS WITH` query against the graph, not a filter over a preloaded list. Views
 are deep-linkable (`?tab=time&v=npm:debug@4.4.3`).
@@ -695,10 +718,10 @@ flowchart TB
     q3["maintainers<br/>typosquats"]
   end
 
-  queries --> cli["blastradius CLI<br/>23 commands"]
+  queries --> cli["blastradius CLI<br/>30 commands"]
   queries --> api["Express API<br/>admission control<br/>epoch-invalidated cache"]
 
-  api --> dash["React dashboard<br/>7 sheets · SSE attack clock"]
+  api --> dash["React dashboard<br/>8 sheets · SSE attack clock"]
   cli --> gate["CI gate<br/>exit 0/1/2 · SARIF 2.1.0"]
   gate --> gh["GitHub code scanning<br/>Security tab"]
 ```

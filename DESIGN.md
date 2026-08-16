@@ -182,14 +182,20 @@ The type scale is the strictest rule in the system:
 - `button, input, select, textarea { font: inherit }` — otherwise a button
   lands on the UA's 13.333px Arial, a second invisible type scale running
   underneath the designed one.
-- Body annotation is capped at `74ch`; keyed explainers at `78ch`.
+- Prose measure is capped at `58ch`, not the more usual 65–75. `ch` is the width
+  of a zero, and this face is condensed — so a cap that *reads* generous renders
+  far wider than the character count implies. The number was measured against
+  the rendered line, not assumed from the unit.
+- A `max-width` on a `<td>` does nothing unless the table is `table-layout:
+  fixed`; cap the measure on a wrapper inside the cell instead.
 
 ## Layout
 
 - `main` is a single scrolling column of sheets at 20px padding; `grid-2` for
   paired questions (now vs. then), collapsing at 1100px.
 - The masthead is a **title block** (identity, imprint, survey extent, search)
-  over a **sheet index** (the seven view tabs, underlined not filled). The
+  over a **sheet index** (the eight view tabs, underlined not filled, two of
+  them carrying a live count). The
   index scrolls horizontally rather than wrapping.
 - Rhythm: 9px inside a group, 16px between sheets, 22px before a table.
   Headings take more space above than below.
@@ -201,7 +207,8 @@ The type scale is the strictest rule in the system:
 
 ## Elevation & Depth
 
-There is **one shadow in the product**: the command palette, `0 18px 48px
+There are **two shadows in the product**, both on overlays that genuinely
+float: the command palette and the shortcut sheet, `0 18px 48px
 rgba(0,0,0,0.62)` — a real offset with real blur, because the palette genuinely
 floats above the sheet.
 
@@ -239,6 +246,43 @@ that print across. Never an indeterminate spinner: on this product latency runs
 **Key band** (`.verdict-key`) — a segmented survey legend. Bands sit tight
 against each other as one instrument; the active band is underlined in its own
 state colour and its count is set in the instrument size.
+
+
+**Copy control** (`CopyTable`) — sits in a sheet's title block at the far end of
+the rule, as two quiet bordered buttons. It reads the *rendered* table rather
+than the source data, so what is copied is exactly what is on screen, filters
+and truncation included. It reports failure (`copy blocked`) rather than
+claiming a copy that did not happen — a control that lies about succeeding is
+worse than one that is absent.
+
+**Band strip** (`.band-strip`) — the distance scale as a control, top-right of
+the plot. One button per hop band, labelled with its real population from the
+same BFS the layout runs. The selected band draws its ring in `buff` and
+everything outside it drops to a trace. Hidden below 640px, where the plot is
+too small to filter usefully.
+
+**Tab badge** (`.tab-badge`) — a count on the sheet index, in the state colour
+of what it counts. Only two sheets carry one, and both are numbers a responder
+is already scanning for; a badge on every tab would be noise rather than signal.
+
+**Shortcut sheet** (`.shortcuts`) — a centred overlay on the palette backdrop,
+listing every binding. Opened with `?`, closed with `?` or Escape.
+
+**Sheet boundary** (`SheetBoundary`) — the error fallback, drawn as an ordinary
+sheet whose designation names which one failed. React unmounts the whole tree
+when a render throws, so without this one bad panel blanks the navigation and
+the other seven sheets with it. Offers "draw it again", which re-mounts only
+that sheet.
+
+**Suggestions** (`.suggestions`) — near-matches offered beside a not-found
+error, as clickable pills in the reference ink. A dead end on a mistyped key is
+the most likely way a first-time reader concludes the tool is broken.
+
+**Print** — the sheet prints as a sheet: ink inverted to paper, screen-only
+chrome (navigation, controls, band strip, copy buttons) dropped, table headers
+repeating across page breaks, sheets refusing to split mid-table, the plotted
+canvas kept because it is the evidence, and the deep link printed beside the
+wordmark so a paper copy says where it came from.
 
 **Force graph** — the signature surface. `forceRadial` pins every node to the
 ring for its own hop count from ground zero, so **distance on the plot is

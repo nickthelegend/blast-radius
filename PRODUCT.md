@@ -66,10 +66,10 @@ lockfile history as a queryable graph. That is the whole position.
 - The user's own vocabulary is lockfiles, resolution, transitive depth, pinning,
   advisories, purls, and semver ranges. The product speaks that language natively
   and does not translate it into softer words.
-- Both a CLI (23 commands) and a browser dashboard exist, and the CLI is the
+- Both a CLI (30 commands) and a browser dashboard exist, and the CLI is the
   senior surface: every dashboard view corresponds to a command.
 - The graph is real: 1,480 packages, 12,463 versions, 10,015 resolved edges,
-  40 real OSV advisories, 20 repositories, persisted in object storage.
+  40 real OSV advisories, 19 repositories, persisted in object storage.
 
 ## Capabilities and Constraints
 
@@ -86,8 +86,8 @@ lockfile history as a queryable graph. That is the whole position.
 - **Result sets are large:** the flagship traversal returns ~6,000 paths; tables
   routinely run to hundreds of rows.
 - The dashboard is read-only. The server refuses mutations from the browser.
-- Seven views: blast radius, time machine, remediation, maintainer web,
-  typosquats, attack clock, Cypher console.
+- Eight views: blast radius, time machine, remediation, advisories, maintainer
+  web, typosquats, attack clock, Cypher console.
 
 ## Brand Commitments
 
@@ -116,7 +116,7 @@ Real, in the repository, and never to be fabricated around:
   exposed through `vitest@2.1.9 → debug@4.4.3`.
 - Real measured timings and read epochs surfaced throughout the UI.
 - Two GitHub Actions workflows that pass on a real runner.
-- `docs/hydradb-findings.md` — ten documented engine findings with evidence,
+- `docs/hydradb-findings.md` — eleven documented engine findings with evidence,
   including a case where `algo.MSpaths` with `pairwise: true` silently drops
   pairs.
 

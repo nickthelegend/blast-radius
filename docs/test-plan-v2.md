@@ -78,7 +78,7 @@ Each: correct HTTP status, a body matching its documented shape, and no 5xx.
 | C8 | 8 concurrent `/api/stats` | all 200; coalesced; wall time under 3s warm | **PASS** — 8 concurrent in 0.62s wall |
 | C9 | DB unreachable mid-session | endpoints return a clear error; the app renders it, does not blank | **PASS** — see F6 |
 
-## D. Dashboard — the seven views
+## D. Dashboard — the eight views
 
 Each: renders real data, zero console errors, zero failed requests.
 
@@ -218,10 +218,10 @@ the root, then re-verified individually and again in a full top-to-bottom re-run
 
 **Zero mocks, zero stubs, zero fallback data** — the CI marker guard passes over
 all shipped source. **Zero console errors and zero failed requests** across all
-seven views at both widths. The one `net::ERR_ABORTED` in the network log is the
+eight views at both widths. The one `net::ERR_ABORTED` in the network log is the
 attack clock's SSE stream being deliberately closed by the stop control;
 `EventSource.close()` is called on stop, unmount, completion and error.
 
-Re-verified after every fix: 113/113 tests, three packages typecheck clean, the
-design detector reports 0 findings across 7 views × 2 widths, both CI workflows
+Re-verified after every fix: 125/125 tests, three packages typecheck clean, the
+design detector reports 0 findings across 8 views × 2 widths, both CI workflows
 green, and a clean clone reproduces every fix.

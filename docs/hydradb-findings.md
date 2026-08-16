@@ -207,7 +207,43 @@ because `CLOUD_PROVIDER=local` looks like the obvious way to start.
 
 ---
 
-## 8. Container storage permissions
+## 8. Write idempotency is keyed on `query_id`, which the server auto-numbers
+
+The HTTP API accepts an optional `query_id`. If the client omits it, graph-node
+assigns `http-query-<N>` from an in-process `AtomicU64`.
+
+That counter restarts at 1 when graph-node restarts — but the object store still
+holds the idempotency keys from before the restart. The next batched write then
+reuses a key that already stored *different* content, and the whole request is
+rejected:
+
+```
+idempotency key conflict for relationship-import request key
+http-query-94.unwind-relationship-merge: this key already stored a …
+```
+
+Surfaced to the client as an opaque `500 internal: internal query execution
+error`. It is easy to miss because it needs a restart *plus* an existing store
+to reproduce — a fresh container never shows it, so it survived several
+full-suite runs before appearing.
+
+**What we did.** The client generates its own `query_id` (a UUID) for every
+query, held constant across retries of the same logical write so a retry lands
+under the same key rather than a new one. `tests/unit/client.test.ts` pins all
+four properties: an id is always sent, ids are unique across queries, a retry
+reuses its id, and every chunk of a batch gets its own.
+
+---
+
+## 9. `/healthz` does not exist
+
+The upstream README lists `GET /healthz` among the admin endpoints. The router
+actually serves `/livez`, `/readyz` and `/metrics` — `/healthz` returns 404.
+Minor, but it is the kind of thing that makes a health check silently useless.
+
+---
+
+## 10. Container storage permissions
 
 The image runs as uid 10001. A host bind mount — especially on macOS, or any
 filesystem mounted `noowners` — leaves `/data` unwritable for that uid, and the

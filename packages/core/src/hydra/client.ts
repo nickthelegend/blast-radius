@@ -12,6 +12,8 @@
  *              next_cursor, bookmark }
  */
 
+import { randomUUID } from 'node:crypto';
+
 export type Consistency = 'causal' | 'strong';
 
 /** Externally-tagged property value as it appears inside a returned path node. */
@@ -180,9 +182,26 @@ export class HydraClient {
     const retries = options.retries ?? 2;
     let lastError: unknown;
 
+    // One id per logical query, reused across retries.
+    //
+    // HydraDB derives the idempotency key for a write from the request's
+    // `query_id`. When the client omits it the server assigns `http-query-<N>`
+    // from an in-process counter — which restarts at 1 when graph-node
+    // restarts. The store still holds the keys from before the restart, so the
+    // next batch collides with a *different* payload under the same key and the
+    // whole request fails:
+    //
+    //   idempotency key conflict for relationship-import request key
+    //   http-query-94.unwind-relationship-merge
+    //
+    // A client-generated unique id removes the collision entirely. Holding it
+    // constant across retries is deliberate: a retried write is the same write,
+    // and should land under the same key rather than a fresh one.
+    const queryId = randomUUID();
+
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        return await this.execute(cypher, options);
+        return await this.execute(cypher, options, queryId);
       } catch (error) {
         lastError = error;
         // A rejected query (bad Cypher, unsupported feature) is deterministic —
@@ -194,10 +213,15 @@ export class HydraClient {
     throw lastError;
   }
 
-  private async execute(cypher: string, options: QueryOptions): Promise<QueryResult> {
+  private async execute(
+    cypher: string,
+    options: QueryOptions,
+    queryId: string,
+  ): Promise<QueryResult> {
     const body: Record<string, unknown> = {
       cell_id: this.config.cellId,
       query: cypher,
+      query_id: queryId,
       consistency: options.consistency ?? this.config.defaultConsistency,
     };
     if (options.parameters && Object.keys(options.parameters).length > 0) {

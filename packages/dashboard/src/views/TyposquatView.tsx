@@ -41,6 +41,12 @@ export function TyposquatView(): JSX.Element {
     LIKELY_LEGITIMATE: findings.filter((finding) => finding.verdict === 'LIKELY_LEGITIMATE').length,
   };
   const shown = filter === 'ALL' ? findings : findings.filter((f) => f.verdict === filter);
+  // Rendering every row of a 200-finding list is slow and unreadable, but a cap
+  // that is not stated is a silent truncation — the reader would have no way to
+  // know findings were withheld. So the cap is applied AND reported.
+  const RENDER_LIMIT = 120;
+  const visible = shown.slice(0, RENDER_LIMIT);
+  const withheld = shown.length - visible.length;
 
   return (
     <div className="panel">
@@ -85,7 +91,7 @@ export function TyposquatView(): JSX.Element {
             </tr>
           </thead>
           <tbody>
-            {shown.slice(0, 120).map((finding) => (
+            {visible.map((finding) => (
               <tr key={`${finding.trustedKey}-${finding.candidateKey}`}>
                 <td className="mono">{finding.trustedName}</td>
                 <td className="mono danger">{finding.candidateName}</td>
@@ -104,6 +110,14 @@ export function TyposquatView(): JSX.Element {
             ))}
           </tbody>
         </table>
+      )}
+
+      {withheld > 0 && (
+        <div className="explainer">
+          Showing <b>{visible.length}</b> of <b>{shown.length}</b> findings.{' '}
+          {withheld} more are not rendered — narrow the filter to see them, or use{' '}
+          <span className="mono">blastradius typosquats --all</span>.
+        </div>
       )}
     </div>
   );

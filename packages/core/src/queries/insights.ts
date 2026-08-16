@@ -394,7 +394,14 @@ export interface AdvisoryView {
   severity: string;
   published: number;
   affectedCount: number;
+  /** Repos whose *current* lockfile pins an affected version. */
   exposedRepos: string[];
+  /**
+   * Repos that pinned an affected version in a *superseded* lockfile and have
+   * since upgraded away. Clean today, and they shipped it — which is the whole
+   * argument for keeping lockfile history, applied to real CVEs.
+   */
+  historicalRepos: string[];
 }
 
 /** Every real advisory in the graph, with the repos each one currently reaches. */
@@ -410,19 +417,25 @@ export async function advisories(
 
   const [rows, pinned] = await Promise.all([
     client.query(cypher, options),
+    // Both tenses in one read. A current-state scanner sees only the first, and
+    // on this dataset that means every advisory reports zero — while six
+    // services did in fact ship an affected version at some point.
     client.query(
-      'MATCH (s:LockfileSnapshot)-[r:RESOLVED]->(v:Version) WHERE s.is_current = true ' +
-        'RETURN DISTINCT s.repo_name AS repo_name, v.key AS version_key',
+      'MATCH (s:LockfileSnapshot)-[r:RESOLVED]->(v:Version) ' +
+        'RETURN DISTINCT s.repo_name AS repo_name, v.key AS version_key, ' +
+        's.is_current AS is_current',
       options,
     ),
   ]);
 
   const reposByVersion = new Map<string, Set<string>>();
+  const historicalByVersion = new Map<string, Set<string>>();
   for (const record of pinned.records) {
     const key = str(record.version_key);
-    const set = reposByVersion.get(key) ?? new Set<string>();
+    const target = record.is_current === true ? reposByVersion : historicalByVersion;
+    const set = target.get(key) ?? new Set<string>();
     set.add(str(record.repo_name));
-    reposByVersion.set(key, set);
+    target.set(key, set);
   }
 
   const byId = new Map<string, AdvisoryView>();
@@ -436,19 +449,103 @@ export async function advisories(
       published: num(record.published),
       affectedCount: 0,
       exposedRepos: [],
+      historicalRepos: [],
     };
     view.affectedCount += 1;
-    const repos = reposByVersion.get(str(record.version_key));
+    const versionKey = str(record.version_key);
+    const repos = reposByVersion.get(versionKey);
     if (repos) for (const repo of repos) if (!view.exposedRepos.includes(repo)) view.exposedRepos.push(repo);
+    const past = historicalByVersion.get(versionKey);
+    if (past) {
+      for (const repo of past) {
+        // A repo exposed right now is not also "historical" — that would double
+        // count it and overstate the cleanup.
+        if (!view.exposedRepos.includes(repo) && !view.historicalRepos.includes(repo)) {
+          view.historicalRepos.push(repo);
+        }
+      }
+    }
     byId.set(id, view);
   }
 
   const list = [...byId.values()].sort(
     (a, b) =>
       b.exposedRepos.length - a.exposedRepos.length ||
+      b.historicalRepos.length - a.historicalRepos.length ||
       severityWeight(b.severity) - severityWeight(a.severity),
   );
-  for (const view of list) view.exposedRepos.sort();
+  for (const view of list) {
+    view.exposedRepos.sort();
+    view.historicalRepos.sort();
+  }
 
   return { advisories: list, elapsedMs: rows.elapsedMs + pinned.elapsedMs, cypher };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Arm a real advisory                                                        */
+/* -------------------------------------------------------------------------- */
+
+export interface AdvisoryArming {
+  advisoryId: string;
+  summary: string;
+  severity: string;
+  published: number;
+  from: number;
+  to: number;
+  /** Every version the advisory's AFFECTS edges point at. */
+  versions: Array<{ id: number; key: string }>;
+}
+
+/**
+ * Resolve a real OSV advisory into the set of versions it affects.
+ *
+ * The demo's headline incident is a hand-marked window, which is the right
+ * shape for a *malicious publish* — a package that was bad for six minutes.
+ * A vulnerability disclosure is a different shape: every affected version was
+ * vulnerable from the moment it was published, and stays so until it is
+ * upgraded away from. So this is the other half of the workflow — "GHSA-xxx
+ * just dropped, mark everything it touches" — driven by the graph's own
+ * `AFFECTS` edges rather than by anything typed in by hand.
+ *
+ * The window defaults to the advisory's own publication date through now, which
+ * is the honest reading of "this has been exploitable since disclosure". Both
+ * ends are overridable.
+ */
+export async function resolveAdvisory(
+  client: HydraClient,
+  advisoryId: string,
+  options: { from?: number; to?: number } = {},
+): Promise<AdvisoryArming | null> {
+  const meta = await client.query(
+    'MATCH (a:Advisory) WHERE a.key = $key ' +
+      'RETURN a.key AS key, a.summary AS summary, a.severity AS severity, ' +
+      'a.published AS published LIMIT 1',
+    { parameters: { key: advisoryId } },
+  );
+  const record = meta.records[0];
+  if (!record) return null;
+
+  const affected = await client.query(
+    'MATCH (a:Advisory)-[:AFFECTS]->(v:Version) WHERE a.key = $key ' +
+      'RETURN v.id AS id, v.key AS key ORDER BY key',
+    { parameters: { key: advisoryId } },
+  );
+
+  const published = typeof record.published === 'number' ? record.published : 0;
+
+  return {
+    advisoryId: typeof record.key === 'string' ? record.key : advisoryId,
+    summary: typeof record.summary === 'string' ? record.summary : '',
+    severity: typeof record.severity === 'string' ? record.severity : 'UNKNOWN',
+    published,
+    from: options.from ?? published,
+    to: options.to ?? Date.now(),
+    versions: affected.records
+      .map((row) => ({
+        id: typeof row.id === 'number' ? row.id : -1,
+        key: typeof row.key === 'string' ? row.key : '',
+      }))
+      .filter((entry) => entry.id >= 0 && entry.key !== ''),
+  };
 }

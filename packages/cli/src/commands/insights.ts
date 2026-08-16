@@ -201,15 +201,32 @@ export async function advisoriesCommand(options: { json?: boolean }): Promise<vo
   out.write(`${bold('ADVISORIES IN THE GRAPH')} ${dim('(real OSV.dev records)')}\n\n`);
   for (const advisory of report.advisories) {
     const reach = advisory.exposedRepos.length;
-    const color = reach > 0 ? red : dim;
+    const past = advisory.historicalRepos.length;
+    const color = reach > 0 ? red : past > 0 ? yellow : dim;
     out.write(
       `  ${pad(advisory.id, 22)} ${pad(advisory.severity, 10)} ` +
-        `${color(`${reach} repo(s)`)} ${dim(`${advisory.affectedCount} version(s)`)}\n`,
+        `${color(`${reach} now`)} ${past > 0 ? yellow(`${past} then`) : dim('0 then')} ` +
+        `${dim(`${advisory.affectedCount} version(s)`)}\n`,
     );
-    if (advisory.summary) out.write(dim(`    ${advisory.summary.slice(0, 96)}\n`));
-    if (reach > 0) out.write(`    ${red(advisory.exposedRepos.join(', '))}\n`);
+    if (advisory.summary) out.write(dim(`    ${advisory.summary.slice(0, 92)}\n`));
+    if (reach > 0) out.write(`    ${red(`exposed now: ${advisory.exposedRepos.join(', ')}`)}\n`);
+    if (past > 0) out.write(`    ${yellow(`shipped it: ${advisory.historicalRepos.join(', ')}`)}\n`);
   }
+
+  const everShipped = new Set(report.advisories.flatMap((a) => a.historicalRepos));
+  const liveCount = report.advisories.filter((a) => a.exposedRepos.length > 0).length;
   out.write(`\n${dim(`${report.advisories.length} advisories · ${duration(report.elapsedMs)}`)}\n`);
+
+  if (liveCount === 0 && everShipped.size > 0) {
+    // The headline finding on a well-maintained estate, and the one a
+    // current-state scanner structurally cannot produce.
+    out.write(
+      `\n${yellow('No advisory affects a current lockfile')} — every one of these was upgraded away from.\n` +
+        `But ${bold(String(everShipped.size))} repositories shipped an affected version at some point: ` +
+        `${yellow([...everShipped].sort().join(', '))}.\n` +
+        dim('A scanner that only reads current lockfiles reports all of this as clean.\n'),
+    );
+  }
 }
 
 /** `blastradius sbom <repo>` — CycloneDX export. */

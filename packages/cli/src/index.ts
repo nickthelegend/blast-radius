@@ -31,6 +31,7 @@ import { maintainersCommand } from './commands/maintainers.js';
 import { remediateCommand } from './commands/remediate.js';
 import { serveCommand } from './commands/serve.js';
 import { listScenariosCommand, simulateCommand } from './commands/simulate.js';
+import { markAdvisoryCommand } from './commands/advisory.js';
 import { diffCommand } from './commands/diff.js';
 import { timeMachineCommand } from './commands/timeMachine.js';
 import { typosquatsCommand } from './commands/typosquats.js';
@@ -79,6 +80,16 @@ program
   .option('--no-compare', 'skip the "exposed now vs during window" comparison')
   .option('--json', 'emit JSON')
   .action(timeMachineCommand);
+
+program
+  .command('mark-advisory')
+  .description('mark every version a real OSV advisory affects as compromised')
+  .argument('<advisory>', 'advisory id, e.g. GHSA-xvch-5gv4-984h')
+  .option('--from <instant>', 'override the window start (default: disclosure date)')
+  .option('--to <instant>', 'override the window end (default: now)')
+  .option('--clear', 'unmark instead')
+  .option('--json', 'emit JSON')
+  .action(markAdvisoryCommand);
 
 program
   .command('diff')

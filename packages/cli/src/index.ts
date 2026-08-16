@@ -94,6 +94,7 @@ program
   .command('remediate')
   .description('what to change to clear the exposure — minimal dependency upgrades')
   .argument('<version>', 'compromised version key')
+  .option('--minimal', 'the smallest set of changes that clears every exposed repo')
   .option('--depth <n>', 'maximum dependency-chain depth')
   .option('--verified', 'read with strong consistency')
   .option('--json', 'emit JSON')

@@ -350,3 +350,115 @@ async function lookupVersion(
     versionString: str(record.version_string),
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Minimal global fix set                                                     */
+/* -------------------------------------------------------------------------- */
+
+export interface FixSetChange {
+  packageName: string;
+  to: string;
+  /** Repositories this single change clears. */
+  clears: string[];
+  direction: 'upgrade' | 'rollback' | 'none';
+  isMajorBump: boolean;
+}
+
+export interface MinimalFixSet {
+  source: VersionRef;
+  /** The chosen changes, in the order they were selected. */
+  changes: FixSetChange[];
+  /** Repos no single dependency change in the graph can clear. */
+  unfixable: string[];
+  reposExposed: number;
+  reposCovered: number;
+  /** Distinct changes the per-repo plan would have you make. */
+  naiveChangeCount: number;
+  elapsedMs: number;
+}
+
+/**
+ * The smallest set of dependency changes that clears every exposed repository.
+ *
+ * `planRemediation` answers per repository, which is the right answer for one
+ * team and the wrong one for the platform engineer who has to open the pull
+ * requests. Eleven services exposed through the same transitive dependency are
+ * one change, not eleven, and knowing that is the difference between an
+ * afternoon and a week.
+ *
+ * This is a set-cover problem — NP-hard in general, so the classic greedy
+ * approximation is used: repeatedly take the change that clears the most
+ * still-exposed repositories. Greedy is within a `ln(n)` factor of optimal,
+ * which at this scale means it is almost always exactly optimal, and it is
+ * deterministic — ties break on package name so the same graph always yields
+ * the same plan. A demo that reorders its own recommendation between runs is
+ * not one anybody should trust.
+ *
+ * It derives entirely from the plan's own per-repo fixes, so it costs no extra
+ * query: the traversal work was already done.
+ */
+export function minimalFixSet(plan: RemediationPlan): MinimalFixSet {
+  const started = Date.now();
+
+  // candidate change -> the set of repos it clears
+  const coverage = new Map<string, { change: FixSetChange; repos: Set<string> }>();
+  const unfixable: string[] = [];
+
+  for (const fix of plan.fixes) {
+    if (fix.targetVersion === null) {
+      unfixable.push(fix.repoName);
+      continue;
+    }
+    const key = `${fix.packageName}@${fix.targetVersion}`;
+    const existing = coverage.get(key);
+    if (existing) {
+      existing.repos.add(fix.repoName);
+      // A change is a major bump if it is one for any repo that would take it.
+      existing.change.isMajorBump = existing.change.isMajorBump || fix.isMajorBump;
+    } else {
+      coverage.set(key, {
+        change: {
+          packageName: fix.packageName,
+          to: fix.targetVersion,
+          clears: [],
+          direction: fix.direction,
+          isMajorBump: fix.isMajorBump,
+        },
+        repos: new Set([fix.repoName]),
+      });
+    }
+  }
+
+  const remaining = new Set(plan.fixes.filter((f) => f.targetVersion !== null).map((f) => f.repoName));
+  const chosen: FixSetChange[] = [];
+
+  while (remaining.size > 0) {
+    let best: { key: string; gain: number } | null = null;
+    for (const [key, entry] of coverage) {
+      let gain = 0;
+      for (const repo of entry.repos) if (remaining.has(repo)) gain++;
+      if (gain === 0) continue;
+      // Deterministic: more coverage wins, then the lexically earlier change.
+      if (!best || gain > best.gain || (gain === best.gain && key < best.key)) {
+        best = { key, gain };
+      }
+    }
+    if (!best) break;
+
+    const entry = coverage.get(best.key)!;
+    const cleared = [...entry.repos].filter((repo) => remaining.has(repo)).sort();
+    chosen.push({ ...entry.change, clears: cleared });
+    for (const repo of cleared) remaining.delete(repo);
+    coverage.delete(best.key);
+  }
+
+  return {
+    source: plan.source,
+    changes: chosen,
+    unfixable: [...new Set(unfixable)].sort(),
+    reposExposed: plan.reposExposed,
+    reposCovered: chosen.reduce((total, change) => total + change.clears.length, 0),
+    naiveChangeCount: plan.distinctChanges.length,
+    elapsedMs: Date.now() - started,
+  };
+}

@@ -259,6 +259,47 @@ chowns it, so this never bites a user of this repo.
 
 ---
 
+## 11. `EXPLAIN` and `PROFILE` are accepted and silently ignored
+
+Both prefixes parse, and the query then runs normally and returns its *results*
+rather than a plan.
+
+```
+$ curl -s .../v1/graphs/default/query -d '{"query":"EXPLAIN MATCH (v:Version) RETURN count(*) AS n", ...}'
+{"query_id":"exp-25902","columns":["n"],"rows":[[{"type":"integer","value":12463}]],"read_epoch":1972,...}
+```
+
+12,463 is the true row count, not an estimate: the `EXPLAIN` was discarded and
+the count executed. `PROFILE` behaves identically.
+
+The query response carries `query_id`, `columns`, `rows`, `read_epoch`,
+`next_cursor` and `bookmark` — and no plan, cost, or access-path field of any
+kind. The optimizer *does* produce that information: the node logs it as a
+structured warning on stdout, including the chosen access path and whether it
+fell back to a scan.
+
+```json
+{"level":"WARN","message":"query plan warrants attention",
+ "hydradb.query.access_path":"FullEdgeScan:RESOLVED_TO",
+ "hydradb.query.full_scan":true,
+ "hydradb.query.rows_estimated":1000000,
+ "hydradb.query.optimizer_passes":"FullScanFallback,JoinOrder",
+ "reason":"full_scan", "planning_elapsed_ms":2}
+```
+
+**Consequence for this project.** A client cannot tell whether a query it just
+issued did an index lookup or scanned every `RESOLVED_TO` edge, because the only
+channel carrying that verdict is the server's log stream. Blast Radius therefore
+does **not** ship an in-product query-plan panel: it would have to tail container
+logs it does not own, and correlating a log line to a specific response would
+mean matching on `query_id` across two transports. Surfacing a plan the client
+guessed at would be worse than not surfacing one.
+
+It is worth noting because it is genuinely the one piece of engine telemetry
+this workload most wants. `/api/stats` counts four edge types and every one of
+them logs `full_scan`; that is exactly the query a plan field would have let the
+tool flag and cache deliberately rather than by measurement.
+
 ## What this project would lose without HydraDB
 
 Not a rhetorical question — it is worth being specific.

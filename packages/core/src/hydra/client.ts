@@ -171,6 +171,14 @@ export class HydraClient {
   /** Rolling count of queries issued, surfaced by `blastradius doctor`. */
   queryCount = 0;
   totalQueryMs = 0;
+  /**
+   * The highest read epoch this client has seen.
+   *
+   * The engine advances the epoch when the graph changes, so this is a cheap
+   * "has anything moved" signal that costs no extra query — callers that cache
+   * a derived value can invalidate against it instead of against a clock.
+   */
+  lastReadEpoch: number | null = null;
 
   constructor(private readonly config: HydraConfig) {}
 
@@ -350,6 +358,9 @@ export class HydraClient {
 
     this.queryCount += 1;
     this.totalQueryMs += elapsedMs;
+    if (parsed.read_epoch !== null && parsed.read_epoch !== undefined) {
+      this.lastReadEpoch = Math.max(this.lastReadEpoch ?? 0, parsed.read_epoch);
+    }
 
     return {
       columns: parsed.columns,

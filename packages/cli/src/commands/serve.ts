@@ -35,6 +35,7 @@ import {
 import express, { type Request, type Response } from 'express';
 
 import { createContext } from '../context.js';
+import { Admission, EpochCache } from '../serve/admission.js';
 import { bold, cyan, dim } from '../format.js';
 
 /** Small helper so every handler reports errors the same way. */
@@ -61,6 +62,55 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
     resultLimit: config.traversal.resultLimit,
   });
 
+  // Admission control. The cap is deliberately small: the engine serves this
+  // graph in hundreds of milliseconds when it is not contended, and queueing in
+  // the server keeps that true instead of letting every caller degrade together.
+  const admission = new Admission(Number(process.env.BLAST_MAX_CONCURRENT_QUERIES ?? 4));
+
+  /** The uncached shape of `/api/stats`. */
+  const buildStats = async () => {
+    const [stats, compromised, repos] = await Promise.all([
+      graphStats(client),
+      listCompromisedVersions(client),
+      listRepos(client, config.org.name),
+    ]);
+    // The dashboard needs to know which of these is *the* incident. After a
+    // simulation, dozens of propagated versions are marked compromised, and most
+    // of them are packages no lockfile pins — landing on one of those renders
+    // every view empty. The recorded incident is the meaningful default, so it
+    // is surfaced here and floated to the front of the list.
+    const incident = snapshotExists(config.paths.snapshot)
+      ? readSnapshot(config.paths.snapshot).incident
+      : null;
+
+    const ordered = incident
+      ? [
+          ...compromised.filter((version) => version.key === incident.version_key),
+          ...compromised.filter((version) => version.key !== incident.version_key),
+        ]
+      : compromised;
+
+    return {
+      stats,
+      compromised: ordered,
+      incident,
+      repos,
+      org: config.org.name,
+      simulatedNow: config.org.simulatedNow,
+      traversal: {
+        maxDepth: config.traversal.maxDepth,
+        pathCount: config.traversal.pathCount,
+      },
+    };
+  };
+
+  // One indexed read to learn whether the graph has moved, standing in for four
+  // full scans when it has not — and correct when another process is the writer.
+  const statsCache = new EpochCache<Awaited<ReturnType<typeof buildStats>>>(async () => {
+    const probe = await client.query('MATCH (v:Version) RETURN v.id AS id LIMIT 1');
+    return probe.readEpoch ?? null;
+  });
+
   const consistencyFor = (req: Request) =>
     req.query.verified === 'true'
       ? config.traversal.verifiedConsistency
@@ -79,39 +129,12 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   app.get(
     '/api/stats',
     handle(async (_req, res) => {
-      const [stats, compromised, repos] = await Promise.all([
-        graphStats(client),
-        listCompromisedVersions(client),
-        listRepos(client, config.org.name),
-      ]);
-      // The dashboard needs to know which of these is *the* incident. After a
-      // simulation, dozens of propagated versions are marked compromised, and
-      // most of them are packages no lockfile pins — landing on one of those
-      // renders every view empty. The recorded incident is the meaningful
-      // default, so it is surfaced here and floated to the front of the list.
-      const incident = snapshotExists(config.paths.snapshot)
-        ? readSnapshot(config.paths.snapshot).incident
-        : null;
-
-      const ordered = incident
-        ? [
-            ...compromised.filter((version) => version.key === incident.version_key),
-            ...compromised.filter((version) => version.key !== incident.version_key),
-          ]
-        : compromised;
-
-      res.json({
-        stats,
-        compromised: ordered,
-        incident,
-        repos,
-        org: config.org.name,
-        simulatedNow: config.org.simulatedNow,
-        traversal: {
-          maxDepth: config.traversal.maxDepth,
-          pathCount: config.traversal.pathCount,
-        },
-      });
+      // The most expensive read in the product — four edge-type counts, every
+      // one of which the engine plans as a full scan — and the one every page
+      // load issues. Coalesced so parallel tab loads share a round trip, and
+      // held across requests only while the read epoch has not advanced.
+      const payload = await admission.run('stats', () => statsCache.get(() => buildStats()));
+      res.json(payload);
     }),
   );
 
@@ -572,13 +595,32 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
 
   app.post(
     '/api/clear-compromised',
-    handle(async (_req, res) => {
+    handle(async (req, res) => {
+      // This used to ignore its body entirely and clear everything, which meant
+      // a caller naming one version got all forty-three wiped and a 200 back.
+      // A destructive endpoint that silently discards the argument scoping it is
+      // the wrong shape, so the scope is now explicit in both directions.
+      const requested = typeof req.body?.version === 'string' ? req.body.version : null;
       const existing = await listCompromisedVersions(client);
+
+      const targets = requested
+        ? existing.filter((version) => version.key === requested)
+        : existing;
+
+      if (requested && targets.length === 0) {
+        res.status(404).json({
+          error: `not marked compromised: ${requested}`,
+          marked: existing.map((version) => version.key),
+        });
+        return;
+      }
+
       await clearCompromised(
         client,
-        existing.map((version) => version.id),
+        targets.map((version) => version.id),
       );
-      res.json({ ok: true, cleared: existing.length });
+      statsCache.invalidate();
+      res.json({ ok: true, cleared: targets.length, scope: requested ?? 'all' });
     }),
   );
 

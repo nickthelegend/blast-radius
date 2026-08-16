@@ -1,4 +1,10 @@
-import { blastRadius, findVersion, planRemediation, type RemediationPlan } from '@blast/core';
+import {
+  blastRadius,
+  findVersion,
+  minimalFixSet,
+  planRemediation,
+  type RemediationPlan,
+} from '@blast/core';
 
 import { createContext, fail } from '../context.js';
 import { bold, cyan, dim, duration, green, pad, red, yellow } from '../format.js';
@@ -7,6 +13,7 @@ export interface RemediateOptions {
   depth?: string;
   json?: boolean;
   verified?: boolean;
+  minimal?: boolean;
 }
 
 export async function remediateCommand(
@@ -30,6 +37,50 @@ export async function remediateCommand(
 
   const report = await blastRadius(client, source, traversal);
   const plan = await planRemediation(client, report, traversal);
+
+  // The per-repo plan is the right answer for one team; the minimal set is the
+  // right answer for whoever has to open the pull requests.
+  if (options.minimal) {
+    const fixSet = minimalFixSet(plan);
+    if (options.json) {
+      process.stdout.write(`${JSON.stringify(fixSet, null, 2)}\n`);
+      return;
+    }
+    const out = process.stdout;
+    out.write(`${bold('MINIMAL FIX SET')} — ${red(plan.source.key)}\n`);
+    out.write(
+      dim(
+        `  ${fixSet.changes.length} change(s) clear ${fixSet.reposCovered} of ` +
+          `${fixSet.reposExposed} exposed repositories.\n`,
+      ),
+    );
+    if (fixSet.naiveChangeCount > fixSet.changes.length) {
+      out.write(
+        dim(`  The per-repository plan lists ${fixSet.naiveChangeCount}; these are the same fixes deduplicated by coverage.\n`),
+      );
+    }
+    out.write('\n');
+    fixSet.changes.forEach((change, index) => {
+      const arrow = change.direction === 'rollback' ? yellow('roll back to') : green('upgrade to');
+      out.write(
+        `  ${dim(`${index + 1}.`)} ${bold(pad(change.packageName, 26))} ${arrow} ${cyan(change.to)}` +
+          (change.isMajorBump ? ` ${yellow('[major]')}` : '') +
+          '\n',
+      );
+      out.write(dim(`     clears ${change.clears.length}: ${change.clears.join(', ')}\n`));
+    });
+    if (fixSet.unfixable.length > 0) {
+      out.write(
+        `\n  ${red('No safe version exists')} for: ${fixSet.unfixable.join(', ')}\n` +
+          dim('  Every published release of the offending dependency reaches the compromised version.\n'),
+      );
+    }
+    out.write(
+      `\n${bold('Solved by:')} greedy set cover over the traversal's own fixes ` +
+        dim(`(${duration(fixSet.elapsedMs)}, no extra query)\n`),
+    );
+    return;
+  }
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);

@@ -299,7 +299,7 @@ main { flex: 1; overflow: auto; padding: 20px; }
   margin: 11px 0 14px;
   color: var(--ink-2);
   font-size: var(--t);
-  max-width: 74ch;
+  max-width: 58ch;
 }
 
 /* Survey conditions: elapsed, consistency, epoch. A chart prints its
@@ -712,7 +712,9 @@ input[type='range']::-moz-range-thumb {
   color: var(--ink-2);
   font-size: var(--t);
   margin: 13px 0 0;
-  max-width: 78ch;
+  /* `ch` is the width of a zero, and this face is condensed — so 78ch renders
+     far wider than 78 characters. Measured, not assumed. */
+  max-width: 58ch;
 }
 .explainer b { color: var(--ink); font-weight: 600; }
 
@@ -787,6 +789,9 @@ tbody tr.row-in {
 }
 .copyable:hover::after { opacity: 0.75; }
 .copyable.copied { color: var(--clear); }
+/* A copy that did not happen must not look like one that did. */
+.copyable.copy-failed { color: var(--buff); }
+.copyable.copy-failed::after { display: none; }
 .copyable.copied::after {
   opacity: 1;
   -webkit-mask-image: var(--icon-check);
@@ -1317,3 +1322,20 @@ tbody tr.row-selected td:first-child { color: var(--ink); }
 
   * { animation: none !important; transition: none !important; }
 }
+
+/* Advisories: the two count columns are the point, so they get room and the
+   summary column absorbs the slack. */
+.advisory-table th:nth-child(2),
+.advisory-table td:nth-child(2) { width: 1%; }
+.advisory-table th:nth-child(3),
+.advisory-table td:nth-child(3),
+.advisory-table th:nth-child(4),
+.advisory-table td:nth-child(4) { width: 1%; text-align: right; padding-right: 18px; }
+.advisory-table th:nth-child(5),
+.advisory-table td:nth-child(5) { width: 1%; }
+.advisory-table td:last-child { white-space: normal; }
+.advisory-table .reason { margin-top: 4px; max-width: none; }
+
+/* The advisories explainer runs the full sheet width, well past a comfortable
+   measure. Every other explanatory block is capped; this one was not. */
+.summary-cell { max-width: 56ch; }

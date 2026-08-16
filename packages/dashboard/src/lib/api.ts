@@ -240,6 +240,8 @@ export interface PreflightReport {
 export interface AdvisoryView {
   id: string; packageKey: string; summary: string; severity: string;
   published: number; affectedCount: number; exposedRepos: string[];
+  /** Repos that shipped an affected version and have since upgraded away. */
+  historicalRepos: string[];
 }
 
 /** An API error that carried near-matches the caller probably meant. */

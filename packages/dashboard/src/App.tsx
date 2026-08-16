@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { api, type StatsResponse } from './lib/api.js';
+import { AdvisoryView } from './views/AdvisoryView.js';
 import { AttackClockView } from './views/AttackClockView.js';
 import { BlastRadiusView } from './views/BlastRadiusView.js';
 import { MaintainerView } from './views/MaintainerView.js';
@@ -10,12 +11,21 @@ import { RemediationView } from './views/RemediationView.js';
 import { TimeMachineView } from './views/TimeMachineView.js';
 import { TyposquatView } from './views/TyposquatView.js';
 
-type Tab = 'blast' | 'time' | 'remediate' | 'maintainers' | 'typosquats' | 'clock' | 'console';
+type Tab =
+  | 'blast'
+  | 'time'
+  | 'remediate'
+  | 'advisories'
+  | 'maintainers'
+  | 'typosquats'
+  | 'clock'
+  | 'console';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'blast', label: 'Blast radius' },
   { id: 'time', label: 'Time machine' },
   { id: 'remediate', label: 'Remediation' },
+  { id: 'advisories', label: 'Advisories' },
   { id: 'maintainers', label: 'Maintainer web' },
   { id: 'typosquats', label: 'Typosquats' },
   { id: 'clock', label: 'Attack clock' },
@@ -286,7 +296,7 @@ export function App(): JSX.Element {
       <main>
         {error && <div className="error">{error}</div>}
 
-        {tab !== 'typosquats' && tab !== 'clock' && tab !== 'console' && (
+        {tab !== 'advisories' && tab !== 'typosquats' && tab !== 'clock' && tab !== 'console' && (
           <div className="panel" style={{ marginBottom: 16 }}>
             <div className="row">
               <span className="muted">compromised version</span>
@@ -332,7 +342,7 @@ export function App(): JSX.Element {
           </div>
         )}
 
-        {!versionKey && tab !== 'typosquats' && tab !== 'clock' && tab !== 'console' && (
+        {!versionKey && tab !== 'advisories' && tab !== 'typosquats' && tab !== 'clock' && tab !== 'console' && (
           <div className="empty">
             Nothing is marked compromised yet. Run <span className="mono">make demo</span>, or{' '}
             <span className="mono">blastradius mark-compromised &lt;version&gt; --from … --to …</span>
@@ -355,6 +365,7 @@ export function App(): JSX.Element {
           <RemediationView versionKey={versionKey} onShowQuery={openInConsole} />
         )}
         {tab === 'maintainers' && versionKey && <MaintainerView packageKey={packageKey} />}
+        {tab === 'advisories' && <AdvisoryView />}
         {tab === 'typosquats' && <TyposquatView />}
         {tab === 'console' && (
           <ConsoleView seedVersionKey={versionKey} initialQuery={consoleQuery} />

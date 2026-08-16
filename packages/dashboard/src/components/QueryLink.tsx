@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+import { copyText } from '../lib/clipboard.js';
+
 /**
  * "Show the query" — provenance for a panel.
  *
@@ -14,7 +16,7 @@ export function QueryLink({
   cypher?: string;
   onOpen: (cypher: string) => void;
 }): JSX.Element | null {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   if (!cypher) return null;
 
   return (
@@ -28,14 +30,20 @@ export function QueryLink({
         show the query
       </button>
       <span
-        className={`copyable muted mono${copied ? ' copied' : ''}`}
+        className={
+          'copyable muted mono' +
+          (copyState === 'copied' ? ' copied' : '') +
+          (copyState === 'failed' ? ' copy-failed' : '')
+        }
         onClick={() => {
-          void navigator.clipboard?.writeText(cypher);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1400);
+          // Only claim success once the write has actually resolved.
+          void copyText(cypher).then((ok) => {
+            setCopyState(ok ? 'copied' : 'failed');
+            setTimeout(() => setCopyState('idle'), 1600);
+          });
         }}
       >
-        {copied ? '' : 'copy'}
+        {copyState === 'idle' ? 'copy' : copyState === 'failed' ? 'copy blocked' : ''}
       </span>
     </span>
   );

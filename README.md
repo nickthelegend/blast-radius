@@ -557,7 +557,7 @@ and every one takes `--json`.
 make serve   # http://127.0.0.1:4000
 ```
 
-Seven views, all backed by live queries — nothing precomputed, nothing mocked:
+Eight views, all backed by live queries — nothing precomputed, nothing mocked:
 
 - **Blast radius** — exposed repos with dependency chains, plus a force-directed
   graph of the exposure rendered from the paths the traversal returned. Toggle
@@ -574,6 +574,7 @@ Seven views, all backed by live queries — nothing precomputed, nothing mocked:
 - **Typosquats** — findings filtered by verdict, with the reason for each.
 - **Attack clock** — runs the scenario over SSE and animates exposure spreading,
   with the elapsed incident clock and the latency of each live traversal.
+- **Advisories** — the 40 real OSV records in both tenses. *Now* counts repositories whose current lockfile pins an affected version; *then* counts those that pinned one in a superseded lockfile and have since upgraded away. On this estate the first column is zero for all forty and the second is not, which is the product's thesis stated from real CVE data rather than the seeded incident.
 - **Cypher console** — the queries this product runs, as editable presets you can
   execute yourself against the live graph. Read-only: the server refuses
   mutations, because a browser tab is the wrong place to write to the graph.

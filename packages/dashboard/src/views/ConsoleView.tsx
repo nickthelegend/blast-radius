@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api, fmtMs, type CypherResult } from '../lib/api.js';
+import { copyText } from '../lib/clipboard.js';
 
 /**
  * The Cypher console.
@@ -228,7 +229,7 @@ export function ConsoleView({
           <button
             className="action"
             style={{ background: 'var(--sheet-2)', color: 'var(--ink-2)' }}
-            onClick={() => void navigator.clipboard?.writeText(substitute(query))}
+            onClick={() => void copyText(substitute(query))}
           >
             copy query
           </button>

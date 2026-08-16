@@ -60,7 +60,7 @@ exits non-zero but findings in the repository's Security tab that annotate the
 pull request and close themselves when the exposure clears. That is live on this
 repository right now.
 
-It ships a CLI, a seven-view live dashboard, and a scripted incident simulator
+It ships a CLI, an eight-view live dashboard, and a scripted incident simulator
 that replays the May 2026 TanStack worm pattern against the real graph with an
 attack clock.
 

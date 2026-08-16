@@ -1,12 +1,14 @@
 # Gate a pull request on supply-chain blast radius.
 #
-# Stands up HydraDB and its object store as service containers, loads the
-# committed graph, scans this repository's own lockfile into it, and fails the
-# build if any compromised version is reachable from what the PR would ship.
+# Stands up HydraDB and its object store through the repository's own compose
+# file, loads the committed graph, scans this repository's actual lockfile into
+# it, and checks whether any compromised version is reachable from what the PR
+# would ship.
 #
 # The gate distinguishes "found something" (exit 1, fail the build) from "could
 # not run the check" (exit 2, something is wrong with the infrastructure) — a
-# scanner that cannot run should never silently pass.
+# scanner that cannot run should never silently pass. Both outcomes are asserted
+# below, so this job is green when the gate is behaving and red when it is not.
 
 name: blast radius
 
@@ -33,11 +35,11 @@ jobs:
       HYDRA_AUTH_TOKEN: local-development-token-32-bytes
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
 
       - name: Install and build
@@ -128,7 +130,7 @@ jobs:
         if: failure()
         run: docker compose logs --tail 200 hydradb minio
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: supply-chain-artifacts

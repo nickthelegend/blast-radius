@@ -63,6 +63,9 @@ export interface SimulationOptions {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Path budget for the per-tick live gauge. See the comment at its use site. */
+const TICK_PATH_BUDGET = 2000;
+
 /**
  * The propagation surface of a stolen publish credential.
  *
@@ -312,10 +315,19 @@ export async function* simulate(
     // Measure exposure across *everything* compromised so far, not just the
     // seed — that is what makes the count climb as the worm spreads, and it is
     // one algo.MSpaths round trip rather than one traversal per package.
+    //
+    // The per-tick traversal runs on a bounded path budget. By the end of a
+    // worm run there are 40+ compromised sources against every repo, and the
+    // full 20k budget pushes a single call past the request timeout — which
+    // stalls the clock mid-demo. This does not weaken the number being shown:
+    // the exposed-repo count comes from the authoritative `RESOLVED` pin
+    // queries inside `combinedExposure`, not from the traversal. The traversal
+    // supplies the reachability view and the latency figure, both of which are
+    // still real, just bounded. The final report re-runs at the full budget.
     const combined = await combinedExposure(client, compromisedKeys, repoKeys, {
       maxDepth: options.traversal.maxDepth,
-      pathCount: options.traversal.pathCount,
-      resultLimit: options.traversal.resultLimit,
+      pathCount: Math.min(options.traversal.pathCount, TICK_PATH_BUDGET),
+      resultLimit: Math.min(options.traversal.resultLimit, TICK_PATH_BUDGET),
     });
 
     // The reachable-package count still comes from the seed's own traversal.

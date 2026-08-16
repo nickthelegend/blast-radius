@@ -197,33 +197,90 @@ export class HydraClient {
     // A client-generated unique id removes the collision entirely. Holding it
     // constant across retries is deliberate: a retried write is the same write,
     // and should land under the same key rather than a fresh one.
-    const queryId = randomUUID();
+    let queryId = randomUUID();
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        return await this.execute(cypher, options, queryId);
+        return await this.drain(cypher, options, queryId);
       } catch (error) {
         lastError = error;
         // A rejected query (bad Cypher, unsupported feature) is deterministic —
         // retrying it just burns time and hides the real message.
         if (error instanceof HydraError && error.status !== null && error.status < 500) throw error;
+
+        // Reuse the id only when the server actually answered. If the failure
+        // was client-side — an abort on timeout, a dropped connection — the
+        // server may still be executing that query, and resending the same id
+        // is rejected with "query id <uuid> is already active". A fresh id is
+        // correct there: the previous attempt is not a write we are retrying
+        // into, it is one whose outcome we no longer know.
+        const serverAnswered = error instanceof HydraError && error.status !== null;
+        if (!serverAnswered) queryId = randomUUID();
+
         if (attempt < retries) await sleep(250 * 2 ** attempt);
       }
     }
     throw lastError;
   }
 
-  private async execute(
+  /**
+   * Run a query and follow `next_cursor` until the server stops paginating.
+   *
+   * The HTTP API caps a response at its configured page size (1024 rows by
+   * default) and hands back a `next_cursor` for the rest. Reading only the
+   * first page is a silent truncation: a `MATCH (v:Version) RETURN v.key` over
+   * a 12,463-version graph comes back with 1024 rows and no error, and every
+   * caller downstream quietly works from a twelfth of the data. Nothing in the
+   * response distinguishes "that was all of it" from "there is more" except
+   * this field, so it is always followed.
+   */
+  private async drain(
     cypher: string,
     options: QueryOptions,
     queryId: string,
   ): Promise<QueryResult> {
+    const first = await this.execute(cypher, options, queryId);
+    if (first.nextCursor === null) return first;
+
+    const rows = [...first.rows];
+    const records = [...first.records];
+    let elapsedMs = first.elapsedMs;
+    let cursor: number | null = first.nextCursor;
+    // A page cursor that never advances would loop forever; bound it.
+    for (let page = 0; cursor !== null && page < 10_000; page++) {
+      // The same query id: a cursor is scoped to the request that produced it,
+      // and a fresh id is rejected with "result cursor does not belong to this
+      // query request".
+      const next = await this.execute(cypher, options, queryId, cursor);
+      rows.push(...next.rows);
+      records.push(...next.records);
+      elapsedMs += next.elapsedMs;
+      cursor = next.nextCursor;
+    }
+
+    return {
+      columns: first.columns,
+      rows,
+      records,
+      readEpoch: first.readEpoch,
+      bookmark: first.bookmark,
+      elapsedMs,
+    };
+  }
+
+  private async execute(
+    cypher: string,
+    options: QueryOptions,
+    queryId: string,
+    cursor?: number,
+  ): Promise<QueryResult & { nextCursor: number | null }> {
     const body: Record<string, unknown> = {
       cell_id: this.config.cellId,
       query: cypher,
       query_id: queryId,
       consistency: options.consistency ?? this.config.defaultConsistency,
     };
+    if (cursor !== undefined) body.cursor = cursor;
     if (options.parameters && Object.keys(options.parameters).length > 0) {
       body.parameters = options.parameters;
     }
@@ -279,6 +336,7 @@ export class HydraClient {
       rows: RawValue[][];
       read_epoch: number | null;
       bookmark: string | null;
+      next_cursor: number | null;
     };
 
     const rows = parsed.rows.map((row) => row.map(decodeValue));
@@ -300,6 +358,7 @@ export class HydraClient {
       readEpoch: parsed.read_epoch,
       bookmark: parsed.bookmark,
       elapsedMs,
+      nextCursor: parsed.next_cursor ?? null,
     };
   }
 

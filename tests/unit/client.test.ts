@@ -97,3 +97,74 @@ describe('write idempotency key', () => {
     expect(new Set(ids).size).toBe(5);
   });
 });
+
+describe('cursor pagination', () => {
+  const page = (rows: unknown[][], nextCursor: number | null) =>
+    new Response(
+      JSON.stringify({ columns: ['k'], rows, read_epoch: 1, bookmark: null, next_cursor: nextCursor }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  const row = (v: string) => [{ type: 'string', value: v }];
+
+  it('follows next_cursor until the server stops paginating', async () => {
+    // The API caps a response at its page size and returns a cursor for the
+    // rest. Reading only the first page is a silent truncation.
+    const pages = [
+      page([row('a'), row('b')], 2),
+      page([row('c'), row('d')], 4),
+      page([row('e')], null),
+    ];
+    let i = 0;
+    vi.stubGlobal('fetch', async () => pages[i++]!);
+
+    const client = new HydraClient(config);
+    const result = await client.query('MATCH (v:Version) RETURN v.key AS k');
+    expect(result.rows.length).toBe(5);
+    expect(result.records.map((r) => r.k)).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  it('does not paginate when next_cursor is null', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', async () => { calls++; return page([row('only')], null); });
+    const client = new HydraClient(config);
+    const result = await client.query('MATCH (n) RETURN n.k AS k');
+    expect(calls).toBe(1);
+    expect(result.rows.length).toBe(1);
+  });
+
+  it('sends the cursor, and reuses the originating query id for continuations', async () => {
+    // A cursor is scoped to the request that produced it — a fresh id is
+    // rejected with "result cursor does not belong to this query request".
+    const bodies: Array<Record<string, unknown>> = [];
+    const pages = [page([row('a')], 7), page([row('b')], null)];
+    let i = 0;
+    vi.stubGlobal('fetch', async (_u: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return pages[i++]!;
+    });
+
+    const client = new HydraClient(config);
+    await client.query('MATCH (n) RETURN n.k AS k');
+    expect(bodies[0]!.cursor).toBeUndefined();
+    expect(bodies[1]!.cursor).toBe(7);
+    expect(bodies[1]!.query_id).toBe(bodies[0]!.query_id);
+  });
+
+  it('uses a fresh query id after a client-side failure, not the stale one', async () => {
+    // On an abort the server may still be running the query; resending the same
+    // id is rejected with "query id <uuid> is already active".
+    const ids: string[] = [];
+    let calls = 0;
+    vi.stubGlobal('fetch', async (_u: string, init: RequestInit) => {
+      ids.push(String(JSON.parse(String(init.body)).query_id));
+      calls++;
+      if (calls === 1) throw new Error('aborted');
+      return page([row('ok')], null);
+    });
+
+    const client = new HydraClient(config);
+    await client.query('MATCH (n) RETURN n.k AS k');
+    expect(ids.length).toBe(2);
+    expect(ids[0]).not.toBe(ids[1]);
+  });
+});

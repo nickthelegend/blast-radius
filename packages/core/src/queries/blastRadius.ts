@@ -508,21 +508,22 @@ export async function combinedExposure(
   // The traversal walks the global resolution graph, so it also reaches repos
   // that have upgraded away. Intersect with what current lockfiles actually
   // pin, for the same reason `blastRadius` does — otherwise a remediated repo
-  // keeps counting as exposed. HydraDB's WHERE has no `IN`, so this is one
-  // small query per compromised version rather than a single disjunction.
-  const exposedRepos = new Set<string>();
-  const pinQueries = await Promise.all(
-    compromisedVersionKeys.map((key) =>
-      client.query(
-        'MATCH (s:LockfileSnapshot)-[r:RESOLVED]->(v:Version) ' +
-          'WHERE v.key = $key AND s.is_current = true ' +
-          'RETURN DISTINCT s.repo_key AS repo_key',
-        { consistency: options.consistency, parameters: { key } },
-      ),
-    ),
+  // keeps counting as exposed.
+  //
+  // HydraDB's WHERE has no `IN`, so the obvious shape is one query per
+  // compromised version. That is fine for a handful and ruinous for a worm: by
+  // the end of a run there are 40+ of them, and 40 sequential round trips take
+  // longer than the tick interval, which stalls the caller. Instead every
+  // current pin is read in a single query and intersected in memory.
+  const wanted = new Set(compromisedVersionKeys);
+  const pinned = await client.query(
+    'MATCH (s:LockfileSnapshot)-[r:RESOLVED]->(v:Version) WHERE s.is_current = true ' +
+      'RETURN DISTINCT s.repo_key AS repo_key, v.key AS version_key',
+    { consistency: options.consistency },
   );
-  for (const pinResult of pinQueries) {
-    for (const record of pinResult.records) {
+  const exposedRepos = new Set<string>();
+  for (const record of pinned.records) {
+    if (wanted.has(str(record.version_key))) {
       const repoKey = str(record.repo_key);
       if (repoKey) exposedRepos.add(repoKey);
     }

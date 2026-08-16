@@ -380,6 +380,59 @@ function extractPaths(records: Array<Record<string, unknown>>): GraphPath[] {
  * Full blast radius from one compromised version, via `algo.SSpaths`.
  * This is the "what is the complete blast radius" query.
  */
+/**
+ * A blast radius that will not silently under-report.
+ *
+ * `algo.SSpaths` treats `pathCount` as a total budget and truncates *silently*
+ * when it is hit — no flag, no error, just fewer paths. On a tool whose worst
+ * possible failure is under-reporting exposure, accepting that is not an
+ * option, and telling the user to "raise BLAST_PATH_COUNT" pushes an engine
+ * detail onto someone mid-incident.
+ *
+ * So a saturated traversal is re-issued with a widened budget until the result
+ * stops growing, and the report says how many attempts that took. Bounded at
+ * three widenings: if the radius is still growing after an eightfold increase,
+ * the honest answer is to say so rather than loop.
+ */
+export async function blastRadiusComplete(
+  client: HydraClient,
+  source: VersionRef,
+  options: BlastRadiusOptions,
+): Promise<BlastRadiusReport & { widenings: number; budgetUsed: number }> {
+  // Both budgets have to grow together. `pathCount` is what the traversal is
+  // allowed to explore and `resultLimit` is what it is allowed to return —
+  // widening only the first leaves the second as the binding constraint, and
+  // the result stops growing for a reason that looks like completeness.
+  let budget = Math.max(options.pathCount, options.resultLimit);
+  let previousPaths = -1;
+
+  for (let attempt = 0; attempt <= 3; attempt++) {
+    const report = await blastRadius(client, source, {
+      ...options,
+      pathCount: budget,
+      resultLimit: budget,
+    });
+
+    // Not saturated: the engine returned everything it had.
+    if (!report.truncated) {
+      return { ...report, widenings: attempt, budgetUsed: budget };
+    }
+    // Saturated but no longer growing — widening again would not find more.
+    if (report.totalPaths === previousPaths) {
+      return { ...report, widenings: attempt, budgetUsed: budget };
+    }
+    previousPaths = report.totalPaths;
+
+    if (attempt === 3) {
+      // Still growing at 8x. Report it as truncated rather than pretend.
+      return { ...report, widenings: attempt, budgetUsed: budget };
+    }
+    budget *= 2;
+  }
+
+  throw new Error('unreachable');
+}
+
 export async function blastRadius(
   client: HydraClient,
   source: VersionRef,

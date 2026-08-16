@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, type StatsResponse } from './lib/api.js';
 import { SheetBoundary } from './components/SheetBoundary.js';
 import { AdvisoryView } from './views/AdvisoryView.js';
+import { EngineView } from './views/EngineView.js';
 import { AttackClockView } from './views/AttackClockView.js';
 import { BlastRadiusView } from './views/BlastRadiusView.js';
 import { MaintainerView } from './views/MaintainerView.js';
@@ -20,7 +21,8 @@ type Tab =
   | 'maintainers'
   | 'typosquats'
   | 'clock'
-  | 'console';
+  | 'console'
+  | 'engine';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'blast', label: 'Blast radius' },
@@ -31,6 +33,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'typosquats', label: 'Typosquats' },
   { id: 'clock', label: 'Attack clock' },
   { id: 'console', label: 'Cypher console' },
+  { id: 'engine', label: 'Engine' },
 ];
 
 const VALID_TABS = new Set<Tab>(TABS.map((t) => t.id));
@@ -297,7 +300,7 @@ export function App(): JSX.Element {
       <main>
         {error && <div className="error">{error}</div>}
 
-        {tab !== 'advisories' && tab !== 'typosquats' && tab !== 'clock' && tab !== 'console' && (
+        {tab !== 'advisories' && tab !== 'typosquats' && tab !== 'clock' && tab !== 'console' && tab !== 'engine' && (
           <div className="panel" style={{ marginBottom: 16 }}>
             <div className="row">
               <span className="muted">compromised version</span>
@@ -343,7 +346,7 @@ export function App(): JSX.Element {
           </div>
         )}
 
-        {!versionKey && tab !== 'advisories' && tab !== 'typosquats' && tab !== 'clock' && tab !== 'console' && (
+        {!versionKey && tab !== 'advisories' && tab !== 'typosquats' && tab !== 'clock' && tab !== 'console' && tab !== 'engine' && (
           <div className="empty">
             Nothing is marked compromised yet. Run <span className="mono">make demo</span>, or{' '}
             <span className="mono">blastradius mark-compromised &lt;version&gt; --from … --to …</span>
@@ -371,6 +374,7 @@ export function App(): JSX.Element {
           {tab === 'maintainers' && versionKey && <MaintainerView packageKey={packageKey} />}
           {tab === 'advisories' && <AdvisoryView />}
           {tab === 'typosquats' && <TyposquatView />}
+          {tab === 'engine' && <EngineView />}
           {tab === 'console' && (
             <ConsoleView seedVersionKey={versionKey} initialQuery={consoleQuery} />
           )}

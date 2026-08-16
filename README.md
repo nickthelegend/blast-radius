@@ -557,7 +557,7 @@ and every one takes `--json`.
 make serve   # http://127.0.0.1:4000
 ```
 
-Eight views, all backed by live queries — nothing precomputed, nothing mocked:
+Nine views, all backed by live queries — nothing precomputed, nothing mocked:
 
 - **Blast radius** — exposed repos with dependency chains, plus a force-directed
   graph of the exposure rendered from the paths the traversal returned. Toggle
@@ -575,6 +575,12 @@ Eight views, all backed by live queries — nothing precomputed, nothing mocked:
 - **Attack clock** — runs the scenario over SSE and animates exposure spreading,
   with the elapsed incident clock and the latency of each live traversal.
 - **Advisories** — the 40 real OSV records in both tenses. *Now* counts repositories whose current lockfile pins an affected version; *then* counts those that pinned one in a superseded lockfile and have since upgraded away. On this estate the first column is zero for all forty and the second is not, which is the product's thesis stated from real CVE data rather than the seeded incident.
+- **Engine** — HydraDB reporting on itself, from its own `/metrics`: queries
+  completed, rows returned, write amplification, and failures broken out by the
+  engine's *own* twelve-way classification, each marked retried or surfaced.
+  Garbage collection, the verifier, the GraphBLAS artifact path and the compute
+  queue are all shown — including the ones that read zero, because a zero here
+  is a fact about this workload rather than a missing metric.
 - **Cypher console** — the queries this product runs, as editable presets you can
   execute yourself against the live graph. Read-only: the server refuses
   mutations, because a browser tab is the wrong place to write to the graph.
@@ -721,7 +727,7 @@ flowchart TB
   queries --> cli["blastradius CLI<br/>30 commands"]
   queries --> api["Express API<br/>admission control<br/>epoch-invalidated cache"]
 
-  api --> dash["React dashboard<br/>8 sheets · SSE attack clock"]
+  api --> dash["React dashboard<br/>9 sheets · SSE attack clock"]
   cli --> gate["CI gate<br/>exit 0/1/2 · SARIF 2.1.0"]
   gate --> gh["GitHub code scanning<br/>Security tab"]
 ```
@@ -788,7 +794,7 @@ changes. Full detail in
 make test
 ```
 
-125 tests, ~70s against a running HydraDB.
+131 tests, ~80s against a running HydraDB.
 
 **Unit** (no database): proximity scoring and every typosquat threshold,
 including the false-positive classes we had to suppress; semver range

@@ -244,6 +244,30 @@ export interface AdvisoryView {
   historicalRepos: string[];
 }
 
+export interface EngineReport {
+  ready: number | null;
+  http: string;
+  bolt: string;
+  client: {
+    queriesIssued: number; totalQueryMs: number;
+    lastReadEpoch: number | null; lastBookmark: string | null;
+    errorClasses: Record<string, number>;
+  };
+  queries: {
+    started: number | null; completed: number | null; failed: number | null;
+    rowsReturned: number | null; failedByClass: Record<string, number>;
+    backpressureWaits: number | null; cancellations: number | null;
+    authFailures: number | null; scopeDenials: number | null;
+  };
+  writes: { attempts: number; commits: number; retries: number; amplification: number | null };
+  storage: {
+    gcJobsStarted: number; gcJobsCompleted: number; gcKeysDeleted: number;
+    gcDurationMs: number; verifierRuns: number; verifierFailures: number;
+  };
+  graphblas: { artifactSnapshots: number; rebuiltSnapshots: number; cacheMs: number; sparseFallbacks: number };
+  compute: { tasks: number; queueMs: number };
+}
+
 /** An API error that carried near-matches the caller probably meant. */
 export class ApiError extends Error {
   constructor(
@@ -353,10 +377,7 @@ export const api = {
   preflight: (limit = 10) => get<PreflightReport>(`/api/preflight?limit=${limit}`),
   advisories: () =>
     get<{ advisories: AdvisoryView[]; elapsedMs: number }>('/api/advisories'),
-  engine: () =>
-    get<{ ready: number | null; queriesIssued: number; totalQueryMs: number; bolt: string; http: string }>(
-      '/api/engine',
-    ),
+  engine: () => get<EngineReport>('/api/engine'),
   typosquats: () =>
     get<{ findings: TyposquatFinding[]; elapsedMs: number; cypher: string }>('/api/typosquats'),
 };

@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs';
 import {
   advisories,
   blastRadius,
+  blastRadiusComplete,
   explainPath,
   exportSbom,
   findVersion,
@@ -359,7 +360,17 @@ export async function ciCommand(options: {
   const since = options.since ? parseInstant(options.since, '--since') : null;
 
   for (const version of compromised) {
-    const report = await blastRadius(client, version, traversal);
+    // The gate is the one place a silently truncated traversal would be worst:
+    // a budget-capped result reports fewer exposures and the build goes green.
+    const report = await blastRadiusComplete(client, version, traversal);
+    if (report.truncated) {
+      out.write(
+        yellow(
+          `  WARNING ${version.key}: still saturated at a budget of ${report.budgetUsed} ` +
+            `after ${report.widenings} widening(s) — this gate may be under-reporting.\n`,
+        ),
+      );
+    }
     for (const exposure of report.exposedRepos) {
       if (options.repo && exposure.repoName !== options.repo && exposure.repoKey !== options.repo) {
         continue;

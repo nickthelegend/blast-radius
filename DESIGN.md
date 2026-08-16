@@ -194,7 +194,7 @@ The type scale is the strictest rule in the system:
 - `main` is a single scrolling column of sheets at 20px padding; `grid-2` for
   paired questions (now vs. then), collapsing at 1100px.
 - The masthead is a **title block** (identity, imprint, survey extent, search)
-  over a **sheet index** (the eight view tabs, underlined not filled, two of
+  over a **sheet index** (the nine view tabs, underlined not filled, two of
   them carrying a live count). The
   index scrolls horizontally rather than wrapping.
 - Rhythm: 9px inside a group, 16px between sheets, 22px before a table.

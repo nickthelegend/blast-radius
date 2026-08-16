@@ -576,17 +576,90 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
         const match = new RegExp(`^${name}(?:\\{[^}]*\\})?\\s+([0-9.eE+-]+)$`, 'm').exec(text);
         return match?.[1] ? Number(match[1]) : null;
       };
+      /** Sum a labelled series across all its label sets. */
+      const sum = (name: string): number => {
+        let total = 0;
+        for (const line of text.split('\n')) {
+          if (!line.startsWith(name)) continue;
+          const value = Number(line.trim().split(/\s+/).pop());
+          if (Number.isFinite(value)) total += value;
+        }
+        return total;
+      };
+      /** Pull every label value of a labelled counter, e.g. per error class. */
+      const byLabel = (name: string, label: string): Record<string, number> => {
+        const out: Record<string, number> = {};
+        const pattern = new RegExp(`^${name}\\{[^}]*${label}="([^"]+)"[^}]*\\}\\s+([0-9.eE+-]+)$`, 'gm');
+        for (const match of text.matchAll(pattern)) {
+          if (match[1]) out[match[1]] = Number(match[2]);
+        }
+        return out;
+      };
+
+      const attempts = sum('graph_write_attempts');
+      const commits = sum('graph_write_commits');
+      const retries = sum('graph_write_retries');
 
       res.json({
         ready: metric('graph_runtime_ready'),
-        queriesIssued: client.queryCount,
-        totalQueryMs: Math.round(client.totalQueryMs),
-        bolt: config.hydra.boltUrl,
         http: config.hydra.httpUrl,
-        raw: text
-          .split('\n')
-          .filter((line) => line && !line.startsWith('#'))
-          .slice(0, 40),
+        bolt: config.hydra.boltUrl,
+
+        // What this server has asked of the engine.
+        client: {
+          queriesIssued: client.queryCount,
+          totalQueryMs: Math.round(client.totalQueryMs),
+          lastReadEpoch: client.lastReadEpoch,
+          lastBookmark: client.lastBookmark,
+          errorClasses: Object.fromEntries(client.errorClassCounts),
+        },
+
+        // What the engine has actually done, from its own counters.
+        queries: {
+          started: metric('graph_query_started'),
+          completed: metric('graph_query_completed'),
+          failed: metric('graph_query_failed'),
+          rowsReturned: metric('graph_client_rows_returned'),
+          // The engine's own taxonomy, no longer collapsed into one number.
+          failedByClass: byLabel('graph_query_failed_by_class', 'error_class'),
+          backpressureWaits: metric('graph_client_backpressure_waits'),
+          cancellations: metric('graph_client_cancellations'),
+          authFailures: metric('graph_query_auth_failures'),
+          scopeDenials: metric('graph_query_scope_denials'),
+        },
+
+        // Write amplification: how much work a commit really costs.
+        writes: {
+          attempts,
+          commits,
+          retries,
+          // >1 means the engine retried commits under contention.
+          amplification: commits > 0 ? Number((attempts / commits).toFixed(3)) : null,
+        },
+
+        // The storage engine keeping itself honest.
+        storage: {
+          gcJobsStarted: sum('graph_gc_jobs_started'),
+          gcJobsCompleted: sum('graph_gc_jobs_completed'),
+          gcKeysDeleted: sum('graph_gc_keys_deleted'),
+          gcDurationMs: Math.round(sum('graph_gc_duration_microseconds') / 1000),
+          verifierRuns: sum('graph_verifier_runs'),
+          verifierFailures: sum('graph_verifier_failures'),
+        },
+
+        // The sparse-linear-algebra path. Zero here is a real fact about this
+        // workload, not a missing metric: nothing this product runs builds one.
+        graphblas: {
+          artifactSnapshots: sum('graph_query_graphblas_artifact_snapshots'),
+          rebuiltSnapshots: sum('graph_query_graphblas_rebuilt_snapshots'),
+          cacheMs: Math.round(sum('graph_query_graphblas_cache_microseconds') / 1000),
+          sparseFallbacks: sum('graph_query_rust_sparse_fallbacks'),
+        },
+
+        compute: {
+          tasks: sum('graph_compute_tasks'),
+          queueMs: Math.round(sum('graph_compute_queue_microseconds') / 1000),
+        },
       });
     }),
   );

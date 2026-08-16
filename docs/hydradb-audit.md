@@ -24,7 +24,7 @@ in this engine.
 | `MATCH` / `OPTIONAL MATCH` / `WHERE` / `STARTS WITH` | all confirmed |
 | `count()`, `DISTINCT`, `ORDER BY`, `LIMIT` | confirmed |
 | Bolt (Neo4j wire protocol) | stock `neo4j-driver` connects, reads, and runs `algo.SSpaths` |
-| Admin telemetry | `/readyz` `/livez` `/metrics` — 30+ series including GraphBLAS, GC, verifier, write retries, compute queue, and failures classed as contention/fencing/routing/freshness/admission/timeout/query |
+| Admin telemetry | `/readyz` `/livez` `/metrics` — 30+ series including GraphBLAS, GC, verifier, write retries, compute queue, and failures classed twelve ways: contention, fencing, routing, freshness, admission, timeout, query, authz, corruption, config, storage, kernel |
 
 ### Absent — verified, not assumed
 
@@ -75,10 +75,10 @@ nothing is precomputed into a file at query time.
 | Capability | Status |
 |---|---|
 | **GraphBLAS artifact snapshots** | `graph_query_graphblas_artifact_snapshots` reads **0** on this instance. The engine has a sparse-linear-algebra path; nothing this project does triggers it |
-| **`/metrics` in the product** | Read by `doctor` and by this audit, but never surfaced in the dashboard |
-| **Failure classes** | The engine classes failures as contention / fencing / routing / freshness / admission / timeout / query. The client collapses all of them into one error type |
+| **`/metrics` in the product** | ~~never surfaced~~ **CLOSED.** `/api/engine` now reports queries, failures by class, write amplification, GC, verifier, GraphBLAS and compute-queue state |
+| **Failure classes** | ~~The client collapses all of them into one error type~~ **CLOSED.** Twelve classes, not the seven this audit first reported — reading the live counter surfaced `authz`, `corruption`, `config`, `storage` and `kernel` as well. The client now classifies, and retries only what can succeed |
 | **`bookmark`** | Returned on every response; never used for read-your-writes session guarantees |
-| **GC / verifier telemetry** | `graph_gc_*` and `graph_verifier_*` exposed; never read |
+| **GC / verifier telemetry** | ~~never read~~ **CLOSED.** Surfaced in `/api/engine`. Both read zero on this instance, which is a real fact about a demo-sized graph rather than a missing metric |
 | **Bolt in the product path** | Verified in `doctor` only; every product query goes over HTTP |
 
 ## 3. Where deeper integration genuinely fits — and where it would be forced

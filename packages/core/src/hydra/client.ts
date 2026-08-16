@@ -99,17 +99,107 @@ export interface QueryOptions {
    *  MERGE-based writes this project issues, which are all idempotent. */
   retries?: number;
   timeoutMs?: number;
+  /**
+   * Read-your-writes. Pass a bookmark returned by an earlier query and the
+   * engine will not answer until the graph has reached at least that epoch.
+   *
+   * Verified behaviour, not assumed: handed a bookmark for an epoch that does
+   * not exist yet, the engine blocks rather than answering stale. That makes it
+   * a genuine session guarantee — and a genuine way to hang a request, which is
+   * why `bookmarkTimeoutMs` exists.
+   */
+  bookmark?: string | null;
+  /** How long to wait for a bookmark's epoch before giving up. */
+  bookmarkTimeoutMs?: number;
+}
+
+/**
+ * The engine's own failure taxonomy, surfaced instead of flattened.
+ *
+ * `/metrics` classes failures as contention, fencing, routing, freshness,
+ * admission, timeout and query — and they want opposite responses. Contention
+ * and routing are worth retrying; a malformed query never is; freshness means
+ * the read was too old rather than wrong. Collapsing them into one error type
+ * threw away the only signal that says which of those happened.
+ */
+export type HydraErrorClass =
+  | 'contention'
+  | 'fencing'
+  | 'routing'
+  | 'freshness'
+  | 'admission'
+  | 'timeout'
+  | 'query'
+  | 'authz'
+  | 'corruption'
+  | 'config'
+  | 'storage'
+  | 'kernel'
+  | 'transport'
+  | 'unknown';
+
+/** Whether an error of this class is worth issuing again. */
+export function isRetryable(errorClass: HydraErrorClass): boolean {
+  // A query the engine rejected will be rejected identically forever, and an
+  // admission refusal means it is already overloaded — retrying makes it worse.
+  return (
+    errorClass === 'contention' ||
+    errorClass === 'routing' ||
+    errorClass === 'fencing' ||
+    errorClass === 'transport'
+  );
+}
+
+/** Map an engine error code / message onto its class. */
+export function classifyError(code: string | undefined, message: string): HydraErrorClass {
+  const text = `${code ?? ''} ${message}`.toLowerCase();
+  if (text.includes('conflict') || text.includes('contention') || text.includes('conditional'))
+    return 'contention';
+  if (text.includes('fenc') || text.includes('epoch mismatch')) return 'fencing';
+  if (text.includes('rout') || text.includes('not the leader') || text.includes('wrong cell'))
+    return 'routing';
+  if (text.includes('freshness') || text.includes('stale') || text.includes('too old'))
+    return 'freshness';
+  if (text.includes('admission') || text.includes('overload') || text.includes('buffer'))
+    return 'admission';
+  if (text.includes('timeout') || text.includes('deadline')) return 'timeout';
+  if (text.includes('invalid_request') || text.includes('parse') || text.includes('not supported'))
+    return 'query';
+  if (text.includes('unauthor') || text.includes('forbidden') || text.includes('token'))
+    return 'authz';
+  if (text.includes('corrupt') || text.includes('checksum')) return 'corruption';
+  if (text.includes('config')) return 'config';
+  if (text.includes('object store') || text.includes('storage') || text.includes('s3'))
+    return 'storage';
+  if (text.includes('panic') || text.includes('internal error')) return 'kernel';
+  return 'unknown';
 }
 
 export class HydraError extends Error {
+  readonly errorClass: HydraErrorClass;
+
   constructor(
     message: string,
     readonly status: number | null,
     readonly query: string,
     readonly detail?: unknown,
+    errorClass?: HydraErrorClass,
   ) {
     super(message);
     this.name = 'HydraError';
+    this.errorClass =
+      errorClass ??
+      classifyError(
+        typeof (detail as { code?: string })?.code === 'string'
+          ? (detail as { code?: string }).code
+          : undefined,
+        message,
+      );
+  }
+
+  /** True when issuing the identical query again could plausibly succeed. */
+  get retryable(): boolean {
+    return isRetryable(this.errorClass);
   }
 }
 
@@ -179,6 +269,16 @@ export class HydraClient {
    * a derived value can invalidate against it instead of against a clock.
    */
   lastReadEpoch: number | null = null;
+  /**
+   * The most recent bookmark the engine returned.
+   *
+   * A caller that has just written can hand this to the next read and be
+   * guaranteed to see its own write, rather than hoping causal consistency
+   * happens to be fresh enough.
+   */
+  lastBookmark: string | null = null;
+  /** Failures seen per engine error class, for the engine panel. */
+  readonly errorClassCounts = new Map<HydraErrorClass, number>();
 
   constructor(private readonly config: HydraConfig) {}
 
@@ -212,9 +312,26 @@ export class HydraClient {
         return await this.drain(cypher, options, queryId);
       } catch (error) {
         lastError = error;
-        // A rejected query (bad Cypher, unsupported feature) is deterministic —
-        // retrying it just burns time and hides the real message.
-        if (error instanceof HydraError && error.status !== null && error.status < 500) throw error;
+        // Retry on the engine's own taxonomy rather than on the status code.
+        // A 4xx carrying a `contention` class is worth another attempt; a 5xx
+        // carrying `query` is not, and retrying it just burns time and hides
+        // the real message. The status check remains as the fallback for
+        // errors that arrive with nothing to classify.
+        if (error instanceof HydraError) {
+          this.errorClassCounts.set(
+            error.errorClass,
+            (this.errorClassCounts.get(error.errorClass) ?? 0) + 1,
+          );
+          // Retry when the engine's class says it could succeed, OR when the
+          // server failed in a way that carried no class at all — an
+          // unclassifiable 5xx is transient by definition, and refusing to
+          // retry it would be a regression on the plain status-code rule this
+          // replaced. A 4xx with no class stays fatal: the request was bad.
+          const transientServerError = error.status !== null && error.status >= 500;
+          if (!error.retryable && !(transientServerError && error.errorClass === 'unknown')) {
+            throw error;
+          }
+        }
 
         // Reuse the id only when the server actually answered. If the failure
         // was client-side — an abort on timeout, a dropped connection — the
@@ -289,6 +406,8 @@ export class HydraClient {
       consistency: options.consistency ?? this.config.defaultConsistency,
     };
     if (cursor !== undefined) body.cursor = cursor;
+    // Read-your-writes: the engine waits until the graph reaches this epoch.
+    if (options.bookmark) body.bookmark = options.bookmark;
     if (options.parameters && Object.keys(options.parameters).length > 0) {
       body.parameters = options.parameters;
     }
@@ -313,11 +432,15 @@ export class HydraClient {
     } catch (error) {
       clearTimeout(timer);
       const reason = error instanceof Error ? error.message : String(error);
+      // The request never reached the engine, so there is no engine class to
+      // read. `transport` is retryable: a dropped connection or an abort says
+      // nothing about whether the query itself is sound.
       throw new HydraError(
         `HydraDB unreachable at ${this.endpoint}: ${reason}. Is it running? Try \`make db-up\`.`,
         null,
         cypher,
         error,
+        'transport',
       );
     } finally {
       clearTimeout(timer);
@@ -361,6 +484,7 @@ export class HydraClient {
     if (parsed.read_epoch !== null && parsed.read_epoch !== undefined) {
       this.lastReadEpoch = Math.max(this.lastReadEpoch ?? 0, parsed.read_epoch);
     }
+    if (parsed.bookmark) this.lastBookmark = parsed.bookmark;
 
     return {
       columns: parsed.columns,
@@ -386,21 +510,31 @@ export class HydraClient {
     cypher: string,
     rows: readonly T[],
     options: { chunkSize?: number; onProgress?: (done: number, total: number) => void } = {},
-  ): Promise<{ written: number; elapsedMs: number; requests: number }> {
+  ): Promise<{
+    written: number;
+    elapsedMs: number;
+    requests: number;
+    /** The last chunk's bookmark, so a caller can read its own write. */
+    bookmark: string | null;
+  }> {
     const chunkSize = options.chunkSize ?? 500;
     const startedAt = performance.now();
     let written = 0;
     let requests = 0;
+    let bookmark: string | null = null;
 
     for (let offset = 0; offset < rows.length; offset += chunkSize) {
       const chunk = rows.slice(offset, offset + chunkSize);
-      await this.query(cypher, { parameters: { rows: chunk } });
+      const result = await this.query(cypher, { parameters: { rows: chunk } });
+      // A write returns no read_epoch but does return a bookmark, and that is
+      // the only handle a caller has on "the graph after my write landed".
+      bookmark = result.bookmark ?? bookmark;
       written += chunk.length;
       requests += 1;
       options.onProgress?.(written, rows.length);
     }
 
-    return { written, elapsedMs: performance.now() - startedAt, requests };
+    return { written, elapsedMs: performance.now() - startedAt, requests, bookmark };
   }
 
   /** True when graph-node answers /readyz with 200. */

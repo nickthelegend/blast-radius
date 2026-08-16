@@ -86,8 +86,8 @@ lockfile history as a queryable graph. That is the whole position.
 - **Result sets are large:** the flagship traversal returns ~6,000 paths; tables
   routinely run to hundreds of rows.
 - The dashboard is read-only. The server refuses mutations from the browser.
-- Eight views: blast radius, time machine, remediation, advisories, maintainer
-  web, typosquats, attack clock, Cypher console.
+- Nine views: blast radius, time machine, remediation, advisories, maintainer
+  web, typosquats, attack clock, Cypher console, engine.
 
 ## Brand Commitments
 

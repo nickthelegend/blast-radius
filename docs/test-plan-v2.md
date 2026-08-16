@@ -168,9 +168,39 @@ Each: renders real data, zero console errors, zero failed requests.
 
 ---
 
+## J. Surface added since v2
+
+Everything below shipped after the v2 plan was written and has never been in a
+full top-to-bottom run.
+
+| # | Item | Correct means | Status |
+|---|---|---|---|
+| J1 | `forget <repo>` | removes the Repo and its LockfileSnapshots; leaves Packages/Versions; zero orphaned snapshots; exit 1 + known-repo list on an unknown name | **PASS** — 20→19 repos, 0 orphaned snapshots, packages preserved, exit 1 on unknown; write-then-read consistent over 3 trials |
+| J2 | `mark-advisory <GHSA>` | marks every version the advisory's AFFECTS edges reach, window = disclosure→now, visible in `stats`; `--clear` reverses it exactly | **PASS** — 8 minimist versions armed (1→9 compromised), `--clear` returns to 1 |
+| J3 | `mark-advisory` unknown id | exit 1 naming the command that lists real ones | **PASS** — exit 1 |
+| J4 | `ci --since <instant>` | 1 with no flag (backlog), 0 with a future cutoff, 1 with an old cutoff | **PASS** — 1 / 0 / 1 for no-flag, future cutoff, old cutoff |
+| J5 | Near-match recovery, CLI | a key missing `npm:` prints ranked suggestions; nonsense prints the key format | **PASS** — ranked suggestions for a missing prefix; key-format hint for nonsense |
+| J6 | Near-match recovery, API | 404 body carries a `suggestions` array | **PASS** — 404 with 6 suggestions |
+| J7 | Near-match recovery, dashboard | suggestions render as buttons; clicking one loads that version with rows and no error | **PASS** — 3 buttons rendered; clicking loaded npm:debug@4.4.3 with 16 rows, 0 errors |
+| J8 | Advisories sheet | renders 40 records with NOW/THEN columns; the summary explainer states the finding; filter toggles 4↔40 | **PASS** — 40 records, NOW/THEN columns, finding stated, filter 4↔40 |
+| J9 | Tab badges | Blast radius and Typosquats carry live counts matching the API | **PASS** — badges 6 and 84, both cross-checked against the API |
+| J10 | Keyboard 1–8 | each number selects its sheet; digits typed into a field do **not** navigate | **PASS** — keys 1–8 each select their sheet; a digit typed into a field does not navigate |
+| J11 | `?` shortcut sheet | opens, lists every binding, Esc closes | **PASS** — 11 bindings listed, Esc closes |
+| J12 | Range-ring band filter | each band selects, dims everything outside it, highlights its ring; `all` clears | **PASS** — 4 bands (91/126/61/9), select highlights and dims, `all` clears |
+| J13 | Copy-as-Markdown | produces a valid pipe table of exactly the rows on screen | **PASS** — valid pipe table, rows match exactly what is on screen |
+| J14 | Copy-as-CSV | correctly quoted, header row first | **PASS** — quoted CSV, header first |
+| J15 | Copy failure is honest | when the clipboard is unavailable it reports blocked, never "copied" | **PASS** — reports blocked, never claims copied (verified in a pane where the clipboard is genuinely unavailable) |
+| J16 | Error boundary | a throwing sheet shows a named fallback; nav and other sheets keep working | **PASS** — fault injected into MaintainerView: fallback named the sheet, 8 tabs intact, another sheet rendered 16 rows; fault removed |
+| J17 | Print stylesheet | print rules parse and apply; screen-only chrome hidden on paper | **PASS** — 19 print rules parsed and live |
+| J18 | Lockfile fuzz suite | 12 hostile-input cases pass; no resolution edge to an unparsed package | **PASS** — 12/12 hostile-input cases |
+| J19 | Mermaid architecture diagram | renders on GitHub with no error markers | **PASS** — mermaid present on GitHub, 0 render errors |
+| J20 | Advisory historical tense | `historicalRepos` present in API and non-empty for real records | **PASS** — historicalRepos on 4 advisories, non-empty |
+
+---
+
 ## Result
 
-**79 of 79 testable items PASS.** Ten failed on first execution and were fixed at
+**99 of 99 testable items PASS** (79 from the v2 run, re-verified, plus 20 covering the surface added since). Ten failed on first execution and were fixed at
 the root, then re-verified individually and again in a full top-to-bottom re-run:
 
 | Item | Defect | Fix |

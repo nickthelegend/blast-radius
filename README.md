@@ -794,7 +794,7 @@ changes. Full detail in
 make test
 ```
 
-131 tests, ~80s against a running HydraDB.
+134 tests, ~80s against a running HydraDB.
 
 **Unit** (no database): proximity scoring and every typosquat threshold,
 including the false-positive classes we had to suppress; semver range

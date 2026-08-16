@@ -15,6 +15,7 @@ import {
   graphStats,
   listCompromisedVersions,
   listRepos,
+  boltQuery,
   resolveRepoKeys,
   suggestVersions,
   listVersionsOfPackage,
@@ -500,7 +501,11 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
   app.post(
     '/api/cypher',
     handle(async (req, res) => {
-      const body = req.body as { query?: string; consistency?: 'causal' | 'strong' };
+      const body = req.body as {
+        query?: string;
+        consistency?: 'causal' | 'strong';
+        transport?: 'http' | 'bolt';
+      };
       const query = String(body.query ?? '').trim();
       if (!query) {
         res.status(400).json({ error: 'query is required' });
@@ -518,6 +523,48 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
       }
 
       const started = Date.now();
+
+      // The same query, down the other transport. Bolt compatibility was only
+      // ever asserted in `doctor`; sending a real user query through a stock
+      // Neo4j driver makes it something a reader can check for themselves.
+      if (body.transport === 'bolt') {
+        try {
+          const bolt = await boltQuery(query, {
+            boltUrl: config.hydra.boltUrl,
+            authToken: config.hydra.authToken,
+            graphId: config.hydra.graphId,
+          });
+          res.json({
+            columns: bolt.columns,
+            rows: bolt.rows.slice(0, 200).map((row) =>
+              Object.fromEntries(
+                Object.entries(row).map(([key, value]) => [
+                  key,
+                  typeof value === 'object' && value !== null ? JSON.stringify(value) : value,
+                ]),
+              ),
+            ),
+            rowCount: bolt.rows.length,
+            elapsedMs: bolt.elapsedMs,
+            wallMs: Date.now() - started,
+            readEpoch: null,
+            transport: 'bolt',
+            server: bolt.server,
+          });
+        } catch (error) {
+          res.json({
+            columns: [],
+            rows: [],
+            rowCount: 0,
+            elapsedMs: Date.now() - started,
+            wallMs: Date.now() - started,
+            transport: 'bolt',
+            queryError: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return;
+      }
+
       try {
         const result = await client.query(query, {
           consistency: body.consistency ?? config.traversal.readConsistency,

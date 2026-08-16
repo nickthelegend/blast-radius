@@ -204,6 +204,8 @@ export interface ScenarioSummary {
 }
 
 export interface CypherResult {
+  transport?: 'http' | 'bolt';
+  server?: string | null;
   columns: string[];
   rows: Array<Record<string, unknown>>;
   rowCount: number;
@@ -370,8 +372,11 @@ export const api = {
     get<MaintainerReport>(`/api/maintainers?package=${encodeURIComponent(packageKey)}`),
   remediation: (versionKey: string) =>
     get<RemediationPlan>(`/api/remediation?version=${encodeURIComponent(versionKey)}`),
-  cypher: (query: string, consistency: 'causal' | 'strong' = 'causal') =>
-    post<CypherResult>('/api/cypher', { query, consistency }),
+  cypher: (
+    query: string,
+    consistency: 'causal' | 'strong' = 'causal',
+    transport: 'http' | 'bolt' = 'http',
+  ) => post<CypherResult>('/api/cypher', { query, consistency, transport }),
   prioritise: (versionKey: string) =>
     get<PrioritisedReport>(`/api/prioritise?version=${encodeURIComponent(versionKey)}`),
   preflight: (limit = 10) => get<PreflightReport>(`/api/preflight?limit=${limit}`),

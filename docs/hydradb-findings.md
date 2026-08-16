@@ -322,3 +322,32 @@ Not a rhetorical question — it is worth being specific.
   It is a graph reachability question crossed with a time window, and the answer
   must be exact — a nearest-neighbour result would be actively harmful in an
   incident response.
+
+## 12. The GraphBLAS path is never taken by path procedures
+
+`/metrics` exposes a sparse-linear-algebra subsystem —
+`graph_query_graphblas_artifact_snapshots`, `graph_query_graphblas_rebuilt_snapshots`,
+`graph_query_graphblas_cache_microseconds`, `graph_cache_graphblas_hits` /
+`_misses`, and `graph_query_rust_sparse_fallbacks`. On this deployment **every
+one of them reads zero**, and stays zero under load.
+
+What was tried, all against the running engine:
+
+- `algo.SSpaths` with a path budget of 100,000 over three edge types at depth 20
+- `algo.MSpaths` with multiple indexed sources and targets, 50,000 paths
+- The product's full workload — ~10,000 queries returning 3.6M rows
+
+The counters did not move. There is no documented switch: the `graph-node`
+binary takes no `--help` and exposes no GraphBLAS configuration through the
+query API.
+
+**The conclusion is not "the feature is broken."** It is that this engine's path
+procedures are served by a traversal executor rather than by sparse matrix
+multiplication, and the GraphBLAS artifact path belongs to a different class of
+query — plausibly the whole-graph analytics (centrality, community detection)
+that this engine does not currently expose either. Both observations point the
+same way, which is itself the evidence.
+
+Blast Radius surfaces the zero in the Engine sheet with that explanation rather
+than hiding the row. A metric that reads zero for a knowable reason is more
+informative than one that is absent.

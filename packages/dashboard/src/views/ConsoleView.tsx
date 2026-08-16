@@ -83,6 +83,7 @@ export function ConsoleView({
   const [result, setResult] = useState<CypherResult | null>(null);
   const [running, setRunning] = useState(false);
   const [consistency, setConsistency] = useState<'causal' | 'strong'>('causal');
+  const [transport, setTransport] = useState<'http' | 'bolt'>('http');
   const [seedId, setSeedId] = useState<number | null>(null);
   const [packageId, setPackageId] = useState<number | null>(null);
   /** The selected version's own compromise window, so the Time Machine preset
@@ -142,7 +143,7 @@ export function ConsoleView({
   const run = useCallback(async () => {
     setRunning(true);
     try {
-      setResult(await api.cypher(substitute(query), consistency));
+      setResult(await api.cypher(substitute(query), consistency, transport));
     } catch (error) {
       setResult({
         columns: [],
@@ -156,7 +157,7 @@ export function ConsoleView({
     } finally {
       setRunning(false);
     }
-  }, [query, consistency, substitute]);
+  }, [query, consistency, transport, substitute]);
 
   // ⌘/Ctrl+Enter runs, the way every SQL console works.
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -226,6 +227,17 @@ export function ConsoleView({
             />
             strong consistency
           </label>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={transport === 'bolt'}
+              onChange={(event) => setTransport(event.target.checked ? 'bolt' : 'http')}
+            />
+            over Bolt
+            <span className="muted">
+              (a stock neo4j-driver against the same engine — the compatibility claim, checkable)
+            </span>
+          </label>
           <button
             className="action"
             style={{ background: 'var(--sheet-2)', color: 'var(--ink-2)' }}
@@ -239,6 +251,9 @@ export function ConsoleView({
               {fmtMs(result.elapsedMs)} · round trip {fmtMs(result.wallMs)}
               {result.readEpoch !== null && result.readEpoch !== undefined
                 ? ` · epoch ${result.readEpoch}`
+                : ''}
+              {result.transport === 'bolt'
+                ? ` · over Bolt${result.server ? ` (${result.server})` : ''}`
                 : ''}
             </span>
           )}

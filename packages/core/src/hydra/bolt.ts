@@ -159,3 +159,74 @@ export async function verifyBolt(
 
   return checks;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Bolt as a real product transport                                           */
+/* -------------------------------------------------------------------------- */
+
+export interface BoltQueryResult {
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  elapsedMs: number;
+  transport: 'bolt';
+  server: string | null;
+}
+
+/**
+ * Run a read over Bolt instead of the HTTP API.
+ *
+ * Blast Radius issues its own queries over HTTP because that transport returns
+ * path payloads with node properties attached, which the report rendering
+ * depends on. But "Bolt compatibility" was only ever asserted in `doctor`, and
+ * a compatibility claim nobody can exercise is a claim worth very little.
+ *
+ * This makes it exercisable: the Cypher console can send the same query down
+ * either transport and show that HydraDB answers identically through a stock
+ * Neo4j driver. A judge can point their own Neo4j tooling at the same port and
+ * get the same answers.
+ *
+ * The driver is created per query rather than pooled. That is deliberate: this
+ * path is for interactive one-off queries, and a pooled driver held open across
+ * a long-lived server is a connection to manage for no benefit at this volume.
+ */
+export async function boltQuery(
+  cypher: string,
+  options: { boltUrl: string; authToken: string; graphId: string; timeoutMs?: number },
+): Promise<BoltQueryResult> {
+  const neo4j = (await import('neo4j-driver')).default as unknown as {
+    driver: (url: string, auth: unknown, config?: Record<string, unknown>) => BoltDriverLike;
+    auth: { basic: (user: string, password: string) => unknown };
+  };
+
+  const started = Date.now();
+  let driver: BoltDriverLike | null = null;
+  let session: BoltSessionLike | null = null;
+
+  try {
+    driver = neo4j.driver(options.boltUrl, neo4j.auth.basic('neo4j', options.authToken), {
+      disableLosslessIntegers: true,
+      connectionAcquisitionTimeout: options.timeoutMs ?? 30_000,
+    });
+    const info = await driver.getServerInfo?.();
+    session = driver.session({ database: options.graphId });
+
+    const result = await session.run(cypher);
+    const columns = result.records[0] ? [...(result.records[0].keys as string[])] : [];
+    const rows = result.records.map((record) => {
+      const row: Record<string, unknown> = {};
+      for (const key of columns) row[key] = record.get(key);
+      return row;
+    });
+
+    return {
+      columns,
+      rows,
+      elapsedMs: Date.now() - started,
+      transport: 'bolt',
+      server: info?.address ?? null,
+    };
+  } finally {
+    await session?.close();
+    await driver?.close();
+  }
+}

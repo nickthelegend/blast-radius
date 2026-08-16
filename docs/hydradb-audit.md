@@ -74,12 +74,12 @@ nothing is precomputed into a file at query time.
 
 | Capability | Status |
 |---|---|
-| **GraphBLAS artifact snapshots** | `graph_query_graphblas_artifact_snapshots` reads **0** on this instance. The engine has a sparse-linear-algebra path; nothing this project does triggers it |
+| **GraphBLAS artifact snapshots** | **CLOSED as a documented engine finding (#12).** Not closable as code: probed with a 100k-path `SSpaths`, a multi-source `MSpaths`, and the full ~10k-query workload — every GraphBLAS counter stayed at zero, and the binary exposes no switch. Path procedures in this engine are served by a traversal executor, not sparse matrix multiplication. Surfaced in the Engine sheet *with* that explanation rather than hidden |
 | **`/metrics` in the product** | ~~never surfaced~~ **CLOSED.** `/api/engine` now reports queries, failures by class, write amplification, GC, verifier, GraphBLAS and compute-queue state |
 | **Failure classes** | ~~The client collapses all of them into one error type~~ **CLOSED.** Twelve classes, not the seven this audit first reported — reading the live counter surfaced `authz`, `corruption`, `config`, `storage` and `kernel` as well. The client now classifies, and retries only what can succeed |
 | **`bookmark`** | Returned on every response; never used for read-your-writes session guarantees |
 | **GC / verifier telemetry** | ~~never read~~ **CLOSED.** Surfaced in `/api/engine`. Both read zero on this instance, which is a real fact about a demo-sized graph rather than a missing metric |
-| **Bolt in the product path** | Verified in `doctor` only; every product query goes over HTTP |
+| **Bolt in the product path** | ~~`doctor` only~~ **CLOSED.** The Cypher console has an `over Bolt` toggle that sends the user's real query through a stock `neo4j-driver` and prints the answering server. Verified carrying the flagship traversal — 5,998 paths — and agreeing with HTTP |
 
 ## 3. Where deeper integration genuinely fits — and where it would be forced
 

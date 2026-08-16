@@ -159,7 +159,7 @@ make serve         # dashboard on http://127.0.0.1:4000
 ```
 
 `make doctor` verifies connectivity and asserts every engine capability used.
-`make test` runs 131 tests in ~80s.
+`make test` runs 134 tests in ~80s.
 
 ---
 

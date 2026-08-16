@@ -48,7 +48,7 @@ search-indexer            no              yes
 
 - [Quick start](#quick-start)
 - [What is in the graph](#what-is-in-the-graph)
-- [Usage — eight worked examples](#usage--eight-worked-examples)
+- [Usage — nine worked examples](#usage--nine-worked-examples)
 - [The rest of the CLI](#the-rest-of-the-cli)
 - [The dashboard](#the-dashboard)
 - [How HydraDB is used](#how-hydradb-is-used)
@@ -171,7 +171,7 @@ questions.
 
 ---
 
-## Usage — eight worked examples
+## Usage — nine worked examples
 
 Every command below is real, copy-pasteable, and produces the output shown after
 `make demo`. The compromised package is whatever ingestion recorded in the
@@ -471,11 +471,62 @@ of fanning out four traversals from the client.
 > `tests/integration/mspaths-pairwise.test.ts` pins it down. See
 > [`docs/hydradb-findings.md`](docs/hydradb-findings.md#2-algomspaths-with-pairwise-true-silently-drops-pairs).
 
+### 9 — What changed since I last looked?
+
+The Time Machine says who was exposed at an instant. The question asked on the
+second morning of an incident is what has *moved* since — which repositories
+regressed into exposure, which ones the remediation actually cleared.
+
+```bash
+blastradius diff npm:debug@4.4.3
+```
+
+```
+EXPOSURE DIFF — npm:debug@4.4.3
+  from 2026-08-14T09:00:00Z
+  to   2026-08-16T14:06:05Z
+
+ENTERED EXPOSURE (4)
+  admin-dashboard            lockfile at --to: 2026-08-14T09:04:49Z
+  internal-cli-tool          lockfile at --to: 2026-08-14T09:05:00Z
+  clean at the start of the window, exposed at the end — a regression
+
+CLEARED (4)
+  auth-gateway               lockfile at --from: 2026-07-24T14:55:30Z
+  search-indexer             lockfile at --from: 2026-08-08T15:04:21Z
+  exposed at the start, clean at the end — remediation that landed
+
+STILL EXPOSED (3)
+  customer-portal            lockfile at --to: 2026-08-14T11:59:00Z
+  design-system              lockfile at --to: 2026-08-10T00:22:50Z
+  exposed at both instants — outstanding work
+
+PINNED IT AT SOME POINT, BUT AT NEITHER INSTANT (6)
+  data-pipeline, docs-site, inventory-sync, mobile-bff, notifications-worker, onboarding-frontend
+  Not a change, but not unaffected either — they ran it outside this window.
+
+Net: net zero change
+Query time: 19ms  (one read, epoch 1623 — both instants from one snapshot)
+```
+
+The exact repository counts move once you scan your own projects into the graph
+— `blast-radius` scanning itself adds a repository that is genuinely exposed —
+so treat the shape as the claim, not the totals.
+
+It is deliberately **one** read, not two point-in-time queries. Every lockfile
+that ever pinned the version comes back once and both instants are evaluated
+over that single result, so the two sides of the diff are guaranteed to come
+from the same read epoch. Two separate queries would let a write land between
+them and report a change that was true at neither instant — the one failure mode
+that would make this feature worse than not having it.
+
+---
+
 ---
 
 ## The rest of the CLI
 
-The eight examples above are the story. These are the commands that make it a
+The nine examples above are the story. These are the commands that make it a
 tool rather than a demo — every one of them is a live query against the graph,
 and every one takes `--json`.
 
@@ -489,7 +540,10 @@ and every one takes `--json`.
 | `blastradius sbom <repo>` | The repository's current lockfile as a CycloneDX 1.5 SBOM, with scoped purls and dependency records, generated from the graph's pins. |
 | `blastradius report <version>` | The whole incident as a Markdown document — exposure, window, remediation — for pasting into an incident channel. |
 | `blastradius graph-export <version>` | The blast radius as Graphviz DOT, for rendering outside the dashboard. |
+| `blastradius remediate <version> --minimal` | The *smallest set* of dependency changes that clears every exposed repository, solved as a greedy set cover over the traversal's own fixes. The per-repo plan answers for one team; this answers for whoever has to open the pull requests. On the demo incident, six changes clear all seven repositories. Costs no extra query. |
 | `blastradius ci [--repo N] [--fail-on N] [--max-depth N]` | The CI gate. **Exit 0** clean, **exit 1** exposed, **exit 2** the check could not run — a scanner that cannot run must never silently pass. Wired up in [`.github/workflows/blast-radius.yml`](.github/workflows/blast-radius.yml). |
+| `blastradius ci --sarif <file>` | Emits **SARIF 2.1.0**, which the workflow uploads to GitHub code scanning. The gate stops being an exit code and becomes findings in the Security tab that annotate the pull request. One rule per compromised version, because GitHub groups and dedupes by rule id; `partialFingerprints` are stable so a finding closes itself when the exposure clears instead of reopening every push. |
+| `blastradius ci --format markdown` | The same result as a pull-request comment table. |
 | `blastradius doctor` | Verifies every engine capability the tool depends on against the live database, over both HTTP and Bolt, and reports where they disagree. |
 
 ---
@@ -524,7 +578,23 @@ Seven views, all backed by live queries — nothing precomputed, nothing mocked:
 Every panel carries a **show the query** control that opens the console
 pre-filled with the exact Cypher that produced the numbers on screen — real node
 ids, ready to run. The claim that HydraDB does the traversal is checkable rather
-than asserted.
+than asserted. Each sheet also prints its own **survey conditions** in the bottom
+margin: procedure, elapsed, consistency mode and the read epoch it was pinned to.
+
+The exposure graph is a **survey plot, not a picture**. `forceRadial` pins every
+node to the ring for its own hop count from ground zero, which sits dead centre
+under a crosshair — so distance on the plot *is* dependency depth, and the rings
+are labelled with their hop count and population (`3 HOPS — 62`). Node shape
+carries type as well as colour, so it reads in greyscale. Wheel zooms about the
+pointer, drag pans, and clicking a node **locks** its chain lit rather than
+losing it the moment the pointer moves — in a live demo that is the difference
+between explaining a dependency chain and pointing at a graph that has already
+forgotten it.
+
+The Time Machine's timeline carries the **exposed-repository count as a step
+line** across every capture instant, peaking at eleven. That shape is the
+bitemporal claim made visible: a current-state scanner has exactly one point on
+that line, today.
 
 Press <kbd>⌘K</kbd> anywhere for the command palette; package search is a live
 `STARTS WITH` query against the graph, not a filter over a preloaded list. Views
@@ -542,10 +612,13 @@ Every native feature this project leans on, and where:
 | **`algo.MSpaths`** | The multi-repo check (`--repos`), and the simulation's combined-exposure measurement — every compromised version as an indexed source against every repo as a target, in one round trip. Non-pairwise, deliberately. |
 | **`algo.SPpaths`** | `blastradius why <repo> <version>` — the single-pair question "why is this package in my tree at all", answered by the engine rather than by re-walking a full traversal client-side. Also used in the regression suite to prove a path exists that pairwise `MSpaths` loses. |
 | **Pinned snapshots** | Every query runs against one consistent point-in-time view. This is what makes the Time Machine a *query* rather than a framework: a range predicate over `captured_at` inside a snapshot that cannot shift underneath it. |
+| **One read per bitemporal answer** | `blastradius diff` compares two instants from a *single* query rather than two point-in-time reads, so both sides of the diff necessarily share a read epoch. Two queries would let a write land between them and report a change that was true at neither instant. |
+| **`read_epoch` as a cache key** | The API server holds `/api/stats` — four edge-type counts, every one of which the engine plans as a full scan — only while the graph has not moved, invalidating on the engine's own read epoch rather than on a clock. A stale exposure count is the one lie an incident tool must not tell. The epoch is *asked for* with one indexed probe rather than remembered locally, because `arm`, `scan` and `load` are separate processes writing to the same database. |
 | **`causal` vs `strong` reads** | The dashboard's "verified" toggle and `--verified`. `strong` refreshes the reader from object storage before pinning, guaranteeing every committed write is visible. |
 | **Batched `UNWIND` writes** | The entire loader. ~43k rows in ~95 round trips, ~2s. One statement per node or edge would be hopeless at ecosystem scale. |
 | **OpenCypher subset** | All lookups, aggregates (`count`, `collect`), `ORDER BY` / `LIMIT`, `DISTINCT`, `STARTS WITH` prefix search, and `MERGE`-based idempotent upserts. |
 | **Automatic property indexes** | `MSpaths` selectors resolve `sourceValues` against the string `key` property with no DDL at all. |
+| **What the engine does *not* expose** | `EXPLAIN` and `PROFILE` parse and are then silently ignored — the query runs and returns its results rather than a plan — and the response carries no plan, cost, or access-path field. The optimizer does produce that verdict, but only onto the node's stdout. So this project ships no query-plan panel: it would have to tail container logs it does not own. Written up as [finding 11](docs/hydradb-findings.md). |
 | **Bolt (Neo4j wire protocol)** | `blastradius doctor --bolt` connects a stock `neo4j-driver` to HydraDB, runs a parameterised read and an `algo.SSpaths` call through it, and asserts the result matches the same query over HTTP. Blast Radius runs its own queries over the typed HTTP/JSON API because that transport exposes path payloads with node properties attached, which the report rendering depends on — but the Bolt compatibility is verified, not just claimed. |
 
 Paths come back with **node labels and properties attached**, which is load-
@@ -676,7 +749,7 @@ changes. Full detail in
 make test
 ```
 
-108 tests, ~70s against a running HydraDB.
+113 tests, ~70s against a running HydraDB.
 
 **Unit** (no database): proximity scoring and every typosquat threshold,
 including the false-positive classes we had to suppress; semver range

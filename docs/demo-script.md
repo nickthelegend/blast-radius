@@ -136,6 +136,22 @@ blastradius remediate npm:debug@4.4.3
 > decides nothing: `preact` is one edit from `react`. The verdict combines the
 > kind of edit with the package's age and download volume.
 
+**Cypher console** tab — the shortest route to trust:
+
+> Every number you have just seen is a query, and here they are. This is the
+> traversal from the first panel, running live against the graph.
+
+Press **run**. Point at `6,002 rows · engine 614ms · epoch 3074`.
+
+> Six thousand paths, six hundred milliseconds, and the read epoch it was pinned
+> to. Every panel in this dashboard has a **show the query** control that opens
+> this console pre-filled with the exact Cypher behind it — real node ids, ready
+> to run. You do not have to take any of this on faith.
+
+*(If a judge asks "what changed since the incident?", the answer is one command:
+`blastradius diff npm:debug@4.4.3` — entered, cleared, still exposed, from a
+single read so both sides share an epoch.)*
+
 ---
 
 ## 2:10 – 2:35 — What HydraDB is doing

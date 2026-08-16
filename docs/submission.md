@@ -49,9 +49,20 @@ published version of each offending dependency, throws them all at the graph in
 one `algo.MSpaths` call, and reports the minimal change that stops the
 compromised version being resolved — labelling rollbacks as rollbacks.
 
-It ships a CLI, a six-view live dashboard, and a scripted incident simulator that
-replays the May 2026 TanStack worm pattern against the real graph with an attack
-clock.
+It also answers **what changed**: `blastradius diff` compares exposure at two
+instants from a single read, so the two sides of the diff cannot straddle a
+write — the question an incident commander asks on the second morning.
+
+And it closes the loop into CI. `blastradius ci` exits 0 clean / 1 exposed / 2
+could-not-run, and with `--sarif` emits SARIF 2.1.0 that the shipped GitHub
+Actions workflow uploads to code scanning — so the gate is not a script that
+exits non-zero but findings in the repository's Security tab that annotate the
+pull request and close themselves when the exposure clears. That is live on this
+repository right now.
+
+It ships a CLI, a seven-view live dashboard, and a scripted incident simulator
+that replays the May 2026 TanStack worm pattern against the real graph with an
+attack clock.
 
 ---
 
@@ -148,7 +159,7 @@ make serve         # dashboard on http://127.0.0.1:4000
 ```
 
 `make doctor` verifies connectivity and asserts every engine capability used.
-`make test` runs 95 tests in ~55s.
+`make test` runs 113 tests in ~70s.
 
 ---
 

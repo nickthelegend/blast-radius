@@ -179,8 +179,13 @@ export interface GraphSnapshot {
   advisories: AdvisoryRecord[];
 }
 
-/** A real OSV.dev / GitHub Security Advisory record, retained so the CLI can
- *  answer "which version introduced the vulnerability". */
+/**
+ * A real OSV.dev / GitHub Security Advisory record.
+ *
+ * Loaded as its own node with `AFFECTS` edges to every version it covers, so
+ * severity is a graph property rather than a string on the side. That is what
+ * lets exposure be ranked by real advisory severity instead of by depth alone.
+ */
 export interface AdvisoryRecord {
   id: string;
   package_key: string;
@@ -199,6 +204,7 @@ export const NODE_LABELS = [
   'Org',
   'Repo',
   'LockfileSnapshot',
+  'Advisory',
 ] as const;
 
 export const EDGE_TYPES = [
@@ -209,6 +215,7 @@ export const EDGE_TYPES = [
   'RESOLVED_DIRECT',
   'HAS_SNAPSHOT',
   'NAME_SIMILAR_TO',
+  'AFFECTS',
 ] as const;
 
 export type NodeLabel = (typeof NODE_LABELS)[number];

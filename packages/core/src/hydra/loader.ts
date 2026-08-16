@@ -204,6 +204,20 @@ export async function loadSnapshot(
     })),
   );
 
+  await run(
+    'Advisory',
+    vertexStatement('Advisory', ['key', 'package_key', 'summary', 'published', 'severity', 'affected_count']),
+    snapshot.advisories.map((advisory) => ({
+      vertex: ids.id('adv', advisory.id),
+      key: advisory.id,
+      package_key: advisory.package_key,
+      summary: advisory.summary.slice(0, 500),
+      published: advisory.published,
+      severity: advisory.severity,
+      affected_count: advisory.affected_version_keys.length,
+    })),
+  );
+
   // --- edges ---------------------------------------------------------------
 
   await run(
@@ -279,6 +293,18 @@ export async function loadSnapshot(
       destination_vertex: ids.snapshotId(edge.snapshot_key),
       relationship_vertex: ids.id('e:HAS_SNAPSHOT', `${edge.repo_key}->${edge.snapshot_key}`),
     })),
+  );
+
+  await run(
+    'AFFECTS',
+    edgeStatement('Advisory', 'Version', 'AFFECTS', []),
+    snapshot.advisories.flatMap((advisory) =>
+      advisory.affected_version_keys.map((versionKey) => ({
+        source_vertex: ids.id('adv', advisory.id),
+        destination_vertex: ids.versionId(versionKey),
+        relationship_vertex: ids.id('e:AFFECTS', `${advisory.id}->${versionKey}`),
+      })),
+    ),
   );
 
   await run(

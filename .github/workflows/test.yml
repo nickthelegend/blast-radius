@@ -1,0 +1,38 @@
+# Unit tests on every push. The integration suite needs a live HydraDB, which
+# the blast-radius workflow already stands up — these are the tests that need
+# nothing but Node, so they stay fast and always run.
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: |
+          npx tsc -p packages/core/tsconfig.json --noEmit
+          npx tsc -p packages/cli/tsconfig.json --noEmit
+          npx tsc -p packages/dashboard/tsconfig.json --noEmit
+      - name: Unit tests
+        run: npx vitest run tests/unit
+      - name: No mocks, stubs or placeholders in shipped source
+        run: |
+          if grep -rniE '\b(todo|fixme|mock|stub|dummy|fake|placeholder)\b' \
+               packages/core/src packages/cli/src packages/dashboard/src bin \
+             | grep -viE 'placeholder="npm:debug|non-placeholder characters|not yet implemented by LocalFileSystem|does not implement them'; then
+            echo "::error::forbidden marker found in shipped source"
+            exit 1
+          fi
+          echo "clean"

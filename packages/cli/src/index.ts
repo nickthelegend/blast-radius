@@ -15,6 +15,17 @@ import {
   statsCommand,
 } from './commands/data.js';
 import { exposureCommand } from './commands/exposure.js';
+import {
+  advisoriesCommand,
+  ciCommand,
+  graphExportCommand,
+  maintainerRadiusCommand,
+  preflightCommand,
+  prioritiseCommand,
+  reportCommand,
+  sbomCommand,
+  whyCommand,
+} from './commands/insights.js';
 import { inspectLockfileCommand, scanCommand } from './commands/scan.js';
 import { maintainersCommand } from './commands/maintainers.js';
 import { remediateCommand } from './commands/remediate.js';
@@ -76,6 +87,76 @@ program
   .option('--verified', 'read with strong consistency')
   .option('--json', 'emit JSON')
   .action(remediateCommand);
+
+program
+  .command('prioritise')
+  .alias('prioritize')
+  .description('rank exposed repos by urgency (advisory severity x proximity x directness)')
+  .argument('<version>', 'compromised version key')
+  .option('--depth <n>', 'maximum dependency-chain depth')
+  .option('--json', 'emit JSON')
+  .action(prioritiseCommand);
+
+program
+  .command('preflight')
+  .description('what a compromise WOULD cost, for the packages you depend on today')
+  .option('--limit <n>', 'how many of the most-pinned versions to test', '15')
+  .option('--json', 'emit JSON')
+  .action(preflightCommand);
+
+program
+  .command('why')
+  .description('the dependency chain that pulled a package into a repo (algo.SPpaths)')
+  .argument('<repo>', 'repo name or key')
+  .argument('<version>', 'version key to explain')
+  .option('--depth <n>', 'maximum dependency-chain depth')
+  .option('--json', 'emit JSON')
+  .action(whyCommand);
+
+program
+  .command('maintainer-radius')
+  .description('what burns if this maintainer account is compromised')
+  .argument('<username>', 'maintainer username')
+  .option('--json', 'emit JSON')
+  .action(maintainerRadiusCommand);
+
+program
+  .command('advisories')
+  .description('real OSV advisories in the graph and the repos they reach')
+  .option('--json', 'emit JSON')
+  .action(advisoriesCommand);
+
+program
+  .command('sbom')
+  .description('export a repo\'s current lockfile as a CycloneDX 1.5 SBOM')
+  .argument('<repo>', 'repo name or key')
+  .option('--out <file>', 'write to a file instead of stdout')
+  .action(sbomCommand);
+
+program
+  .command('report')
+  .description('the whole incident as a Markdown report')
+  .argument('<version>', 'compromised version key')
+  .option('--out <file>', 'write to a file instead of stdout')
+  .option('--depth <n>', 'maximum dependency-chain depth')
+  .action(reportCommand);
+
+program
+  .command('graph-export')
+  .description('export the blast radius as Graphviz DOT')
+  .argument('<version>', 'compromised version key')
+  .option('--out <file>', 'write to a file instead of stdout')
+  .option('--depth <n>', 'maximum dependency-chain depth')
+  .action(graphExportCommand);
+
+program
+  .command('ci')
+  .description('CI gate: exit 1 if anything is exposed, 2 if the check could not run')
+  .option('--repo <name>', 'scope the gate to one repository')
+  .option('--fail-on <n>', 'number of exposures that constitutes a failure', '1')
+  .option('--max-depth <n>', 'maximum dependency-chain depth')
+  .option('--json', 'emit JSON')
+  .action(ciCommand);
 
 program
   .command('maintainers')

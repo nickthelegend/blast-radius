@@ -1,0 +1,123 @@
+# Gate a pull request on supply-chain blast radius.
+#
+# Stands up HydraDB and its object store as service containers, loads the
+# committed graph, scans this repository's own lockfile into it, and fails the
+# build if any compromised version is reachable from what the PR would ship.
+#
+# The gate distinguishes "found something" (exit 1, fail the build) from "could
+# not run the check" (exit 2, something is wrong with the infrastructure) — a
+# scanner that cannot run should never silently pass.
+
+name: blast radius
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  supply-chain-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: blastradius
+          MINIO_ROOT_PASSWORD: blastradius-local-secret
+          MINIO_DEFAULT_BUCKETS: blast-radius
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -sf http://localhost:9000/minio/health/live || exit 1"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+      hydradb:
+        image: ghcr.io/hydra-db/hydradb:latest
+        env:
+          CLOUD_PROVIDER: aws
+          AWS_BUCKET: blast-radius
+          AWS_REGION: us-east-1
+          AWS_ENDPOINT: http://minio:9000
+          AWS_ACCESS_KEY_ID: blastradius
+          AWS_SECRET_ACCESS_KEY: blastradius-local-secret
+          AWS_ALLOW_HTTP: "true"
+          GRAPH_NAMESPACE: default
+          GRAPH_ID: default
+          GRAPH_CELL_ID: cell-0
+          GRAPH_CELLS: cell-0
+          GRAPH_NODE_ID: node-0
+          GRAPH_BOLT_NODE_ADDRESSES: node-0=127.0.0.1:7687
+          GRAPH_ADVERTISED_BOLT_ADDR: 127.0.0.1:7687
+          GRAPH_DATA_CACHE_DIR: /tmp/hydradb-cache
+          GRAPH_AUTH_TOKEN_FILE: /tmp/hydradb-token
+          GRAPH_ALLOW_PLAINTEXT: "true"
+          RUST_MIN_STACK: "33554432"
+          GRAPH_MAX_CURSOR_BUFFER_BYTES: "536870912"
+        ports:
+          - 8443:8443
+          - 9090:9090
+
+    env:
+      HYDRA_HTTP_URL: http://127.0.0.1:8443
+      HYDRA_ADMIN_URL: http://127.0.0.1:9090
+      HYDRA_AUTH_TOKEN: local-development-token-32-bytes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install and build
+        run: |
+          npm ci
+          npx tsc -p packages/core/tsconfig.json
+          npx tsc -p packages/cli/tsconfig.json
+
+      - name: Wait for HydraDB
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null "$HYDRA_ADMIN_URL/readyz"; then
+              echo "HydraDB ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "HydraDB never became ready"; exit 1
+
+      - name: Load the dependency graph
+        run: ./bin/blastradius load
+
+      - name: Verify every engine capability the gate relies on
+        run: ./bin/blastradius doctor
+
+      - name: Scan this repository's lockfile
+        run: ./bin/blastradius scan . --name "${GITHUB_REPOSITORY##*/}"
+
+      - name: Arm the known incident
+        run: ./bin/blastradius arm
+
+      - name: Blast radius gate
+        run: ./bin/blastradius ci --repo "${GITHUB_REPOSITORY##*/}"
+
+      - name: Export SBOM
+        if: always()
+        run: ./bin/blastradius sbom "${GITHUB_REPOSITORY##*/}" --out sbom.cdx.json
+
+      - name: Incident report
+        if: failure()
+        run: |
+          ./bin/blastradius report "$(./bin/blastradius incident --key)" --out incident.md
+          cat incident.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: supply-chain-artifacts
+          path: |
+            sbom.cdx.json
+            incident.md
+          if-no-files-found: ignore

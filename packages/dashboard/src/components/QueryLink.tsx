@@ -21,7 +21,7 @@ export function QueryLink({
     <span className="row" style={{ gap: 10, marginTop: 8 }}>
       <button
         className="action"
-        style={{ background: 'var(--panel-2)', color: 'var(--muted)', fontSize: 11.5, padding: '5px 10px' }}
+        style={{ background: 'var(--sheet-2)', color: 'var(--ink-2)', padding: '5px 10px' }}
         onClick={() => onOpen(cypher)}
         title="Open this query in the Cypher console"
       >
@@ -29,7 +29,6 @@ export function QueryLink({
       </button>
       <span
         className={`copyable muted mono${copied ? ' copied' : ''}`}
-        style={{ fontSize: 11.5 }}
         onClick={() => {
           void navigator.clipboard?.writeText(cypher);
           setCopied(true);

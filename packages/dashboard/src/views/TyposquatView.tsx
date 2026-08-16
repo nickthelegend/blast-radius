@@ -1,11 +1,19 @@
 import { useEffect, useState } from 'react';
 
+import { Conditions } from '../components/Conditions.js';
 import { api, fmtDate, fmtMs, type TyposquatFinding } from '../lib/api.js';
+import { Plotting } from '../components/Plotting.js';
 
 const VERDICT_CLASS: Record<TyposquatFinding['verdict'], string> = {
   SUSPICIOUS: 'danger',
   WATCH: 'warn',
   LIKELY_LEGITIMATE: 'ok',
+};
+
+/** The key's bands, including the unfiltered total which has no verdict of its own. */
+const BAND_CLASS: Record<'ALL' | TyposquatFinding['verdict'], string> = {
+  ...VERDICT_CLASS,
+  ALL: 'all',
 };
 
 export function TyposquatView(): JSX.Element {
@@ -32,7 +40,7 @@ export function TyposquatView(): JSX.Element {
   }, []);
 
   if (error) return <div className="error">{error}</div>;
-  if (!findings) return <div className="empty">loading…</div>;
+  if (!findings) return <Plotting label="reading NAME_SIMILAR_TO edges" />;
 
   const counts = {
     ALL: findings.length,
@@ -58,28 +66,23 @@ export function TyposquatView(): JSX.Element {
         <i>react</i> and entirely legitimate, so distance alone decides nothing.
       </p>
 
-      <div className="row" style={{ marginBottom: 12 }}>
+      <div className="verdict-key">
         {(['SUSPICIOUS', 'WATCH', 'LIKELY_LEGITIMATE', 'ALL'] as const).map((value) => (
           <button
             key={value}
-            className="action"
-            style={{
-              background: filter === value ? 'var(--accent)' : 'var(--panel-2)',
-              color: filter === value ? '#07131f' : 'var(--muted)',
-            }}
+            className={`key-band${filter === value ? ' active' : ''} ${BAND_CLASS[value]}`}
+            aria-pressed={filter === value}
             onClick={() => setFilter(value)}
           >
-            {value.replace('_', ' ')} ({counts[value]})
+            <span className="name">{value.replace('_', ' ')}</span>
+            <span className="count">{counts[value]}</span>
           </button>
         ))}
-        <span className="muted mono" style={{ marginLeft: 'auto' }}>
-          {fmtMs(elapsed)}
-        </span>
       </div>
 
       {shown.length === 0 && <div className="empty">Nothing in this category.</div>}
       {shown.length > 0 && (
-        <table>
+        <table className="typosquat-table">
           <thead>
             <tr>
               <th>your dependency</th>
@@ -102,9 +105,7 @@ export function TyposquatView(): JSX.Element {
                 </td>
                 <td>
                   <span className={`pill ${VERDICT_CLASS[finding.verdict]}`}>{finding.verdict}</span>
-                  <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
-                    {finding.reason}
-                  </div>
+                  <div className="reason muted">{finding.reason}</div>
                 </td>
               </tr>
             ))}
@@ -119,6 +120,14 @@ export function TyposquatView(): JSX.Element {
           <span className="mono">blastradius typosquats --all</span>.
         </div>
       )}
+
+      <Conditions
+        entries={[
+          ['elapsed', fmtMs(elapsed)],
+          ['source', 'NAME_SIMILAR_TO edges'],
+          ['findings', findings?.length ?? 0],
+        ]}
+      />
     </div>
   );
 }

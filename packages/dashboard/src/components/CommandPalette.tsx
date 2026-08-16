@@ -157,7 +157,7 @@ export function CommandPalette({
               <span className="kind">{item.kind}</span>
               <span className="mono">{item.label}</span>
               {item.hint && (
-                <span className="muted" style={{ marginLeft: 'auto', fontSize: 12 }}>
+                <span className="muted" style={{ marginLeft: 'auto' }}>
                   {item.hint}
                 </span>
               )}

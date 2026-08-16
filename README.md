@@ -732,6 +732,11 @@ synthetic. Everything beneath them is real.
 
 ---
 
+- **IBM Plex** (<https://github.com/IBM/plex>) — IBM Plex Sans Condensed and IBM
+  Plex Mono, self-hosted under the SIL Open Font License 1.1 in
+  [`packages/dashboard/public/fonts`](packages/dashboard/public/fonts). Latin
+  subsets only, ~100KB, committed so the dashboard renders with no network.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

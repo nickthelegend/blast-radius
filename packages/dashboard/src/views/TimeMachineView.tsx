@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { Conditions } from '../components/Conditions.js';
 import { QueryLink } from '../components/QueryLink.js';
 import { api, fmtDate, fmtMs, fmtTime, type TimeMachineResponse } from '../lib/api.js';
+import { Plotting } from '../components/Plotting.js';
 
 /**
  * The Time Machine view.
@@ -67,7 +69,7 @@ export function TimeMachineView({
   }, [scrub, versionKey]);
 
   if (error) return <div className="error">{error}</div>;
-  if (!data) return <div className="empty">loading…</div>;
+  if (!data) return <Plotting label="reading lockfile history inside a pinned snapshot" rows={4} />;
 
   const { timeMachine } = data;
   const duringNames = new Set(timeMachine.duringWindow.map((exposure) => exposure.repoName));
@@ -86,12 +88,10 @@ export function TimeMachineView({
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="row">
           <div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              COMPROMISE WINDOW
-            </div>
-            <div className="mono" style={{ fontSize: 16 }}>
+            <div className="field-label">compromise window</div>
+            <div className="mono window-value">
               {fmtTime(timeMachine.windowFrom)} → {fmtTime(timeMachine.windowTo)}
-              <span className="muted" style={{ fontSize: 12, marginLeft: 10 }}>
+              <span className="muted" style={{ marginLeft: 10 }}>
                 {new Date(timeMachine.windowFrom).toUTCString().slice(0, 16)}
               </span>
             </div>
@@ -107,29 +107,47 @@ export function TimeMachineView({
               (strong consistency — refreshes from object storage before pinning the snapshot)
             </span>
           </label>
-          <span className="mono muted">
-            {fmtMs(timeMachine.elapsedMs)} · {timeMachine.consistency}
-            {timeMachine.readEpoch !== null ? ` · epoch ${timeMachine.readEpoch}` : ''}
-          </span>
         </div>
+        <Conditions
+          entries={[
+            ['elapsed', fmtMs(timeMachine.elapsedMs)],
+            ['consistency', timeMachine.consistency],
+            ['read epoch', timeMachine.readEpoch],
+          ]}
+        />
       </div>
 
       <div className="panel" style={{ marginBottom: 16 }}>
         <h2>Lockfile timeline</h2>
         <p className="sub">
-          Every capture that ever pinned this version. The red band is the window the malicious
+          Every capture that ever pinned this version. The hatched band is the window the malicious
           build was live. Drag to query exposure as of any instant.
         </p>
         <div className="timeline">
           {bounds && (
             <>
+              {/* Six minutes inside a six-month axis is a hairline. The band is
+                  given a floor width and a drawn bracket so the one interval
+                  this whole product exists to talk about is findable on the
+                  scale, and the callout states the true duration so the floor
+                  never reads as the measurement. */}
               <div
                 className="window"
                 style={{
                   left: `${position(timeMachine.windowFrom)}%`,
-                  width: `${Math.max(0.6, position(timeMachine.windowTo) - position(timeMachine.windowFrom))}%`,
+                  width: `max(3px, ${position(timeMachine.windowTo) - position(timeMachine.windowFrom)}%)`,
                 }}
               />
+              <div
+                className={`window-callout${position(timeMachine.windowFrom) > 62 ? ' flip' : ''}`}
+                style={{ left: `${position(timeMachine.windowFrom)}%` }}
+              >
+                <span className="leader" />
+                <span className="text">
+                  compromise window ·{' '}
+                  {Math.round((timeMachine.windowTo - timeMachine.windowFrom) / 60_000)} min
+                </span>
+              </div>
               {data.allExposures.map((exposure) => {
                 const inWindow =
                   exposure.capturedAt >= timeMachine.windowFrom &&
@@ -142,16 +160,16 @@ export function TimeMachineView({
                     style={{
                       left: `${position(exposure.capturedAt)}%`,
                       top: exposure.isCurrent ? '32%' : '58%',
-                      background: inWindow ? '#ff5c6c' : exposure.isCurrent ? '#4ec9a5' : '#46516b',
+                      background: inWindow ? '#ff6a45' : exposure.isCurrent ? '#9dc46f' : '#6f665a',
                     }}
                   />
                 );
               })}
               <div className="axis" />
-              <div className="axis-label" style={{ left: '4%' }}>
+              <div className="axis-label start">
                 {new Date(bounds.min).toISOString().slice(0, 10)}
               </div>
-              <div className="axis-label" style={{ left: '96%' }}>
+              <div className="axis-label end">
                 {new Date(bounds.max).toISOString().slice(0, 10)}
               </div>
             </>
@@ -168,7 +186,7 @@ export function TimeMachineView({
               onChange={(event) => setScrub(Number(event.target.value))}
               style={{ flex: 1 }}
             />
-            <span className="mono muted" style={{ minWidth: 210 }}>
+            <span className="mono muted scrub-readout">
               as of {fmtDate(scrub ?? bounds.max)}
             </span>
           </div>
@@ -269,7 +287,7 @@ export function TimeMachineView({
                   <td className="mono">{name}</td>
                   <td className={now ? 'danger' : 'ok'}>{now ? 'yes' : 'no'}</td>
                   <td className={during ? 'danger' : 'ok'}>{during ? 'yes' : 'no'}</td>
-                  <td className="muted" style={{ fontSize: 12 }}>
+                  <td className="muted" >
                     {during && !now && 'ran the malicious build, has since upgraded'}
                     {now && !during && 'picked it up after the artifacts were pulled'}
                     {now && during && 'exposed then and now'}

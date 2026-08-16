@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 
+import { Conditions } from '../components/Conditions.js';
 import { QueryLink } from '../components/QueryLink.js';
 import { api, fmtMs, type RemediationPlan } from '../lib/api.js';
+import { Plotting } from '../components/Plotting.js';
 
 /**
  * Remediation view — the "so what do I do" half of an incident.
@@ -44,7 +46,8 @@ export function RemediationView({
   }, [versionKey]);
 
   if (error) return <div className="error">{error}</div>;
-  if (loading && !plan) return <div className="empty">testing candidate versions against the graph…</div>;
+  if (loading && !plan)
+    return <Plotting label="testing every candidate version against the graph — algo.MSpaths" rows={4} />;
   if (!plan) return <div className="empty">no plan</div>;
 
   if (plan.fixes.length === 0) {
@@ -88,7 +91,7 @@ export function RemediationView({
                 <td className="mono">{change.packageName}</td>
                 <td className="mono muted">{change.from.join(', ')}</td>
                 <td className="mono ok">{change.to}</td>
-                <td className="muted" style={{ fontSize: 12.5 }}>
+                <td className="muted" >
                   {change.repos.join(', ')}
                 </td>
               </tr>
@@ -118,9 +121,9 @@ export function RemediationView({
                     <>
                       {fix.packageName} <span className="danger">{fix.currentVersion}</span>
                       {fix.direction === 'rollback' ? (
-                        <span className="warn"> ↓ </span>
+                        <i className="mark fall warn" role="img" aria-label="roll back to" />
                       ) : (
-                        <span className="ok"> ↑ </span>
+                        <i className="mark rise ok" role="img" aria-label="upgrade to" />
                       )}
                       <span className="ok">{fix.targetVersion}</span>
                       {fix.isMajorBump && (
@@ -146,9 +149,13 @@ export function RemediationView({
           </div>
         )}
 
-        <div className="muted mono" style={{ fontSize: 12, marginTop: 10 }}>
-          {fmtMs(plan.elapsedMs)} · algo.MSpaths
-        </div>
+        <Conditions
+          entries={[
+            ['elapsed', fmtMs(plan.elapsedMs)],
+            ['procedure', 'algo.MSpaths'],
+            ['candidates tested', plan.candidatesTested],
+          ]}
+        />
         <QueryLink cypher={plan.cypher} onOpen={onShowQuery} />
       </div>
     </div>

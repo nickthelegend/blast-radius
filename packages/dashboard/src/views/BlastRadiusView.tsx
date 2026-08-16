@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { ForceGraph } from '../components/ForceGraph.js';
+import { Conditions } from '../components/Conditions.js';
 import { QueryLink } from '../components/QueryLink.js';
+import { Plotting } from '../components/Plotting.js';
 import {
   api,
   fmtDate,
@@ -106,12 +108,17 @@ export function BlastRadiusView({
               first 4 repos in one round trip (algo.MSpaths)
             </option>
           </select>
-          {report && (
-            <span className="muted mono">
-              {report.procedure} · {fmtMs(report.elapsedMs)} · {report.totalPaths} paths
-            </span>
-          )}
         </div>
+        {report && (
+          <Conditions
+            entries={[
+              ['procedure', report.procedure],
+              ['elapsed', fmtMs(report.elapsedMs)],
+              ['paths', report.totalPaths.toLocaleString()],
+              ['max depth', report.maxDepthUsed],
+            ]}
+          />
+        )}
       </div>
 
       {error && <div className="error">{error}</div>}
@@ -129,7 +136,7 @@ export function BlastRadiusView({
             Repos whose <b>current</b> lockfile resolves this exact version. Click a row to isolate
             its path in the graph.
           </p>
-          {loading && !report && <div className="empty">running traversal…</div>}
+          {loading && !report && <Plotting label="running the traversal — algo.SSpaths" rows={5} />}
           {report && report.exposedRepos.length === 0 && (
             <div className="empty">No current lockfile resolves this version.</div>
           )}

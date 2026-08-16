@@ -162,9 +162,9 @@ export function ConsoleView({
           {PRESETS.map((preset) => (
             <button
               key={preset.label}
-              className="action"
+              className="preset"
               title={preset.note}
-              style={{ background: 'var(--panel-2)', color: 'var(--muted)', fontSize: 12 }}
+
               onClick={() => {
                 setQuery(preset.query);
                 areaRef.current?.focus();
@@ -185,12 +185,11 @@ export function ConsoleView({
           className="mono"
           style={{
             width: '100%',
-            background: '#080b11',
-            color: 'var(--text)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
+            background: 'var(--well)',
+            color: 'var(--ink)',
+            border: '1px solid var(--rule)',
+            borderRadius: 0,
             padding: 12,
-            fontSize: 12.5,
             lineHeight: 1.6,
             resize: 'vertical',
           }}
@@ -210,7 +209,7 @@ export function ConsoleView({
           </label>
           <button
             className="action"
-            style={{ background: 'var(--panel-2)', color: 'var(--muted)' }}
+            style={{ background: 'var(--sheet-2)', color: 'var(--ink-2)' }}
             onClick={() => void navigator.clipboard?.writeText(substitute(query))}
           >
             copy query
@@ -231,7 +230,7 @@ export function ConsoleView({
         <div className="error">
           <b>The engine rejected this query.</b>
           <div style={{ marginTop: 6 }}>{result.queryError}</div>
-          <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+          <div className="muted" style={{ marginTop: 8 }}>
             HydraDB implements a deliberate subset of OpenCypher and rejects the rest at parse time
             rather than planning something slow. That is the real error message, unmodified.
           </div>
@@ -257,7 +256,7 @@ export function ConsoleView({
                   {result.rows.map((row, index) => (
                     <tr key={index} className="row-in" style={{ animationDelay: `${Math.min(index, 20) * 12}ms` }}>
                       {result.columns.map((column) => (
-                        <td key={column} className="mono" style={{ fontSize: 12.5 }}>
+                        <td key={column} className="mono" >
                           {formatCell(row[column])}
                         </td>
                       ))}

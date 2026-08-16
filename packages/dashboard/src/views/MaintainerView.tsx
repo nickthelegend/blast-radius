@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api, fmtMs, type MaintainerReport } from '../lib/api.js';
+import { Plotting } from '../components/Plotting.js';
 
 /**
  * Radial view of the maintainer web: the package at the centre, the accounts
@@ -74,7 +75,7 @@ function RadialWeb({ report }: { report: MaintainerReport }): JSX.Element {
             cx={neighbor.x}
             cy={neighbor.y}
             r={neighbor.isOrgDependency ? 6 : 3.5}
-            fill={neighbor.isOrgDependency ? '#ff5c6c' : '#4da3ff'}
+            fill={neighbor.isOrgDependency ? '#ff6a45' : '#93b0c2'}
           />
           <title>
             {neighbor.packageName}
@@ -85,11 +86,11 @@ function RadialWeb({ report }: { report: MaintainerReport }): JSX.Element {
 
       {layout.maintainerPoints.map((maintainer) => (
         <g key={maintainer.username}>
-          <circle cx={maintainer.x} cy={maintainer.y} r={7} fill="#ffb454" />
+          <circle cx={maintainer.x} cy={maintainer.y} r={7} fill="#e3ac57" />
           <text
             x={maintainer.x}
             y={maintainer.y - 12}
-            fill="#dbe2f0"
+            fill="#ece6da"
             fontSize={11}
             textAnchor="middle"
             fontFamily="ui-monospace, monospace"
@@ -99,11 +100,11 @@ function RadialWeb({ report }: { report: MaintainerReport }): JSX.Element {
         </g>
       ))}
 
-      <circle cx={centre} cy={centre} r={13} fill="#ff5c6c" />
+      <circle cx={centre} cy={centre} r={13} fill="#ff6a45" />
       <text
         x={centre}
         y={centre + 30}
-        fill="#dbe2f0"
+        fill="#ece6da"
         fontSize={12}
         textAnchor="middle"
         fontFamily="ui-monospace, monospace"
@@ -136,7 +137,7 @@ export function MaintainerView({ packageKey }: { packageKey: string }): JSX.Elem
   }, [packageKey]);
 
   if (error) return <div className="error">{error}</div>;
-  if (!report) return <div className="empty">loading…</div>;
+  if (!report) return <Plotting label="walking MAINTAINS edges — algo.SSpaths" />;
 
   const riskClass =
     report.riskLevel === 'HIGH' ? 'danger' : report.riskLevel === 'MEDIUM' ? 'warn' : 'ok';
@@ -155,7 +156,7 @@ export function MaintainerView({ packageKey }: { packageKey: string }): JSX.Elem
           <span className={`pill ${riskClass}`}>RISK: {report.riskLevel}</span>
           <span className="muted">{report.riskReason}</span>
         </div>
-        <div className="muted mono" style={{ fontSize: 12, marginTop: 6 }}>
+        <div className="muted mono" style={{ marginTop: 6 }}>
           {fmtMs(report.elapsedMs)}
         </div>
       </div>

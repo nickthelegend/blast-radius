@@ -148,7 +148,7 @@ export function AttackClockView({
             {running ? 'stop' : 'run incident'}
           </button>
           {active && (
-            <span className="muted" style={{ fontSize: 12.5, maxWidth: 620 }}>
+            <span className="muted scenario-note">
               {active.reference}
             </span>
           )}
@@ -176,7 +176,7 @@ export function AttackClockView({
               <span className="label">malicious artifacts</span>
             </div>
             <div className="stat">
-              <span className="value" style={{ color: 'var(--accent)' }}>
+              <span className="value" style={{ color: 'var(--survey)' }}>
                 {queryMs ? fmtMs(queryMs) : '—'}
               </span>
               <span className="label">last traversal</span>

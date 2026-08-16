@@ -131,33 +131,46 @@ export function App(): JSX.Element {
 
   return (
     <div className="app">
+      {/* The title block: who drew the sheet, what it covers, and how to index
+          it. The sheet index sits on its own rule beneath, the way a chart set
+          lists its sheets rather than crowding them into the title. */}
       <header className="top">
-        <h1>
-          BLAST <span>RADIUS</span>
-        </h1>
-        <span className="muted" style={{ fontSize: 12.5 }}>
-          supply-chain attack graph · HydraDB
-        </span>
-        {stats && (
-          <span className="muted mono" style={{ fontSize: 12 }}>
-            {stats.stats.packages?.toLocaleString()} packages ·{' '}
-            {stats.stats.versions?.toLocaleString()} versions ·{' '}
-            {stats.stats.resolvedToEdges?.toLocaleString()} resolved edges · {stats.stats.repos} repos
-          </span>
-        )}
-        <button
-          className="action"
-          style={{ background: 'var(--panel-2)', color: 'var(--muted)', fontSize: 12 }}
-          onClick={() => setPaletteOpen(true)}
-          title="Command palette"
-        >
-          search <kbd>⌘K</kbd>
-        </button>
-        <nav className="tabs">
+        <div className="title-block">
+          <h1>
+            BLAST <span>RADIUS</span>
+          </h1>
+          <div className="imprint">
+            <span>supply-chain attack graph</span>
+            <span className="sep" aria-hidden="true" />
+            <span>HydraDB</span>
+          </div>
+          {/* The extent is a count over every edge type, which is a full scan and
+              can take seconds on a cold cache. The block keeps its shape and
+              labels while that resolves, so the title block does not reflow
+              under the reader once the numbers land. */}
+          <dl className="survey-extent">
+            {([
+              ['packages', stats?.stats.packages],
+              ['versions', stats?.stats.versions],
+              ['edges', stats?.stats.resolvedToEdges],
+              ['repos', stats?.stats.repos],
+            ] as const).map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value === undefined ? <span className="pending">measuring</span> : value.toLocaleString()}</dd>
+              </div>
+            ))}
+          </dl>
+          <button className="action" onClick={() => setPaletteOpen(true)} title="Command palette">
+            search <kbd>⌘K</kbd>
+          </button>
+        </div>
+        <nav className="tabs" aria-label="Sheets">
           {TABS.map((entry) => (
             <button
               key={entry.id}
               className={tab === entry.id ? 'active' : ''}
+              aria-current={tab === entry.id ? 'page' : undefined}
               onClick={() => setTab(entry.id)}
             >
               {entry.label}
@@ -190,13 +203,13 @@ export function App(): JSX.Element {
                   if (event.key === 'Enter') setVersionKey(input.trim());
                 }}
                 placeholder="npm:debug@4.4.3"
-                style={{ minWidth: 340 }}
+                className="version-input"
               />
               <button className="action" onClick={() => setVersionKey(input.trim())}>
                 query
               </button>
               {stats && stats.compromised.length > 0 && (
-                <span className="muted" style={{ fontSize: 12.5 }}>
+                <span className="muted" >
                   marked compromised:{' '}
                   {stats.compromised.slice(0, 6).map((version) => (
                     <button

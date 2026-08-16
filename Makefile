@@ -32,6 +32,10 @@ env: ## create .env from .env.example if absent
 
 .PHONY: db-up
 db-up: ## start HydraDB (docker compose) and wait for readiness
+	@# HydraDB binds fixed local ports, so only one instance can run at a time.
+	@# Detect a foreign one and say so, rather than letting Docker fail with a
+	@# port-binding error that does not explain what to do about it.
+	@if lsof -nP -iTCP:8443 -sTCP:LISTEN >/dev/null 2>&1 && 	    [ -z "$$(docker compose ps -q hydradb 2>/dev/null)" ]; then 	  echo "port 8443 is already in use by something outside this project."; 	  echo "Another Blast Radius clone is probably running. Stop it with:"; 	  echo "  docker ps --filter ancestor=ghcr.io/hydra-db/hydradb:latest"; 	  echo "  docker rm -f <container>"; 	  exit 1; 	fi
 	docker compose up -d hydradb
 	@echo "waiting for HydraDB…"
 	@for i in $$(seq 1 60); do \

@@ -26,7 +26,10 @@ services:
 
   hydradb:
     image: ghcr.io/hydra-db/hydradb:latest
-    container_name: blast-hydradb
+    # Deliberately no `container_name`: a fixed name collides across clones, so
+    # a leftover container from another directory would make `make demo` fail
+    # with a raw Docker name-conflict error. Compose derives a per-project name
+    # instead, and `make db-up` checks the ports first.
     depends_on:
       hydradb-init:
         condition: service_completed_successfully

@@ -17,6 +17,11 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+  # Required to upload SARIF to the code-scanning API.
+  security-events: write
+
 jobs:
   supply-chain-gate:
     runs-on: ubuntu-latest
@@ -95,7 +100,7 @@ jobs:
         id: gate
         run: |
           set +e
-          ./bin/blastradius ci --repo "${GITHUB_REPOSITORY##*/}" | tee gate.txt
+          ./bin/blastradius ci --repo "${GITHUB_REPOSITORY##*/}" --sarif blast-radius.sarif.json | tee gate.txt
           code=${PIPESTATUS[0]}
           set -e
           echo "exit=$code" >> "$GITHUB_OUTPUT"
@@ -126,6 +131,16 @@ jobs:
           ./bin/blastradius report "$(./bin/blastradius incident --key)" --out incident.md
           cat incident.md >> "$GITHUB_STEP_SUMMARY"
 
+      # The findings land in the repository's Security tab, annotate the pull
+      # request, and close themselves when the exposure clears — the stable
+      # partialFingerprints are what makes that last part work.
+      - name: Upload findings to code scanning
+        if: always() && hashFiles('blast-radius.sarif.json') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: blast-radius.sarif.json
+          category: blast-radius
+
       - name: Engine logs
         if: failure()
         run: docker compose logs --tail 200 hydradb minio
@@ -137,4 +152,5 @@ jobs:
           path: |
             sbom.cdx.json
             incident.md
+            blast-radius.sarif.json
           if-no-files-found: ignore

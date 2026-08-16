@@ -363,3 +363,107 @@ export function renderDot(report: BlastRadiusReport): string {
   lines.push('}');
   return lines.join('\n');
 }
+
+/* -------------------------------------------------------------------------- */
+/* SARIF                                                                      */
+/* -------------------------------------------------------------------------- */
+
+export interface SarifFinding {
+  version: string;
+  repo: string;
+  depth: number;
+  chain: string;
+  /** The advisory that made this version compromised, when one is recorded. */
+  advisory?: string | null;
+  severity?: string | null;
+}
+
+/**
+ * SARIF 2.1.0 for the CI gate.
+ *
+ * SARIF is what GitHub's code-scanning API ingests, so emitting it is the
+ * difference between a script that exits non-zero and a set of findings that
+ * appear in the Security tab, annotate the pull request, and close themselves
+ * when the exposure clears.
+ *
+ * One rule per compromised version rather than one rule for the whole tool:
+ * GitHub groups, counts and dedupes by rule id, so a single "exposure" rule
+ * would collapse eleven distinct incidents into one row.
+ */
+export function renderSarif(
+  findings: SarifFinding[],
+  options: { toolVersion: string; repoRoot?: string } = { toolVersion: '1.0.0' },
+): unknown {
+  const byVersion = new Map<string, SarifFinding[]>();
+  for (const finding of findings) {
+    const list = byVersion.get(finding.version);
+    if (list) list.push(finding);
+    else byVersion.set(finding.version, [finding]);
+  }
+
+  const rules = [...byVersion.entries()].map(([version, group]) => ({
+    id: `blast-radius/exposed/${version}`,
+    name: 'CompromisedDependencyReachable',
+    shortDescription: { text: `${version} is reachable from this repository` },
+    fullDescription: {
+      text:
+        `A lockfile in this repository resolves ${version}, which is marked ` +
+        'compromised in the dependency graph. The dependency chain that pulls ' +
+        'it in is given on each result.',
+    },
+    help: {
+      text:
+        `Run \`blastradius remediate ${version}\` for the minimal dependency ` +
+        `change that clears it, or \`blastradius why <repo> ${version}\` for the chain.`,
+    },
+    properties: {
+      // GitHub renders these on the finding.
+      tags: ['supply-chain', 'dependencies', 'security'],
+      'security-severity': group[0]?.severity === 'CRITICAL' ? '9.0' : '7.0',
+    },
+    defaultConfiguration: { level: 'error' },
+  }));
+
+  const results = findings.map((finding) => ({
+    ruleId: `blast-radius/exposed/${finding.version}`,
+    level: 'error',
+    message: {
+      text: `${finding.repo} resolves ${finding.version} at depth ${finding.depth}: ${finding.chain}`,
+    },
+    locations: [
+      {
+        physicalLocation: {
+          // The lockfile is the artifact that carries the exposure, so that is
+          // the file GitHub should annotate.
+          artifactLocation: { uri: 'package-lock.json', uriBaseId: '%SRCROOT%' },
+          region: { startLine: 1 },
+        },
+      },
+    ],
+    partialFingerprints: {
+      // Stable across runs so GitHub can close a finding when it clears rather
+      // than opening a new one every push.
+      blastRadiusExposure: `${finding.repo}:${finding.version}`,
+    },
+    properties: { depth: finding.depth, chain: finding.chain, advisory: finding.advisory ?? null },
+  }));
+
+  return {
+    $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
+    version: '2.1.0',
+    runs: [
+      {
+        tool: {
+          driver: {
+            name: 'Blast Radius',
+            informationUri: 'https://github.com/nickthelegend/blast-radius',
+            version: options.toolVersion,
+            rules,
+          },
+        },
+        results,
+        columnKind: 'utf16CodeUnits',
+      },
+    ],
+  };
+}

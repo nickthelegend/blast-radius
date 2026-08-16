@@ -197,3 +197,100 @@ export async function allExposures(
   );
   return result.records.map(toExposure);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Exposure diff                                                              */
+/* -------------------------------------------------------------------------- */
+
+export interface ExposureDiff {
+  version: VersionRef;
+  from: number;
+  to: number;
+  /** Not exposed at `from`, exposed at `to`. */
+  entered: SnapshotExposure[];
+  /** Exposed at `from`, not exposed at `to`. */
+  cleared: SnapshotExposure[];
+  /** Exposed at both instants — still outstanding. */
+  unchanged: SnapshotExposure[];
+  /** Pinned this version at some point, but at neither instant. */
+  untouched: string[];
+  readEpoch: number | null;
+  elapsedMs: number;
+  cypher: string;
+}
+
+/** Which snapshots were live at an instant, out of an already-fetched set. */
+function liveAt(exposures: SnapshotExposure[], instant: number): SnapshotExposure[] {
+  return exposures.filter(
+    (exposure) =>
+      exposure.capturedAt <= instant &&
+      (exposure.supersededAt === 0 || exposure.supersededAt > instant),
+  );
+}
+
+/**
+ * What changed between two instants.
+ *
+ * The Time Machine answers "who was exposed at 09:03". The next question an
+ * incident commander asks is "what has changed since I last looked", which is a
+ * different query.
+ *
+ * It is deliberately **one** read, not two. Every lockfile that ever pinned this
+ * version comes back once, and both instants are then evaluated over that single
+ * result — so the two sides of the diff are guaranteed to come from the same
+ * read epoch. Issuing two point-in-time queries would let a write land between
+ * them, and the diff would report a change that was true at neither instant:
+ * the one failure mode that would make this worse than not having it.
+ */
+export async function exposureDiff(
+  client: HydraClient,
+  version: VersionRef,
+  from: number,
+  to: number,
+  options: { consistency?: QueryOptions['consistency'] } = {},
+): Promise<ExposureDiff> {
+  if (to < from) {
+    throw new Error(
+      `diff window ends before it starts: ${new Date(from).toISOString()} > ${new Date(to).toISOString()}`,
+    );
+  }
+
+  const started = Date.now();
+  const cypher =
+    'MATCH (s:LockfileSnapshot)-[r:RESOLVED]->(v:Version {id: $version_id}) ' + SNAPSHOT_PROJECTION;
+
+  const result = await client.query(cypher, {
+    consistency: options.consistency,
+    parameters: { version_id: version.id },
+  });
+  const ever = result.records.map(toExposure);
+
+  const beforeByRepo = new Map(liveAt(ever, from).map((e) => [e.repoName, e]));
+  const afterByRepo = new Map(liveAt(ever, to).map((e) => [e.repoName, e]));
+
+  const entered = [...afterByRepo].filter(([name]) => !beforeByRepo.has(name)).map(([, e]) => e);
+  const cleared = [...beforeByRepo].filter(([name]) => !afterByRepo.has(name)).map(([, e]) => e);
+  const unchanged = [...afterByRepo].filter(([name]) => beforeByRepo.has(name)).map(([, e]) => e);
+
+  // "Not in the diff" and "never affected" are different answers, and conflating
+  // them is how a repository gets missed.
+  const touched = new Set([...beforeByRepo.keys(), ...afterByRepo.keys()]);
+  const untouched = [
+    ...new Set(ever.map((e) => e.repoName).filter((name) => !touched.has(name))),
+  ].sort();
+
+  const byName = (a: SnapshotExposure, b: SnapshotExposure) => a.repoName.localeCompare(b.repoName);
+
+  return {
+    version,
+    from,
+    to,
+    entered: entered.sort(byName),
+    cleared: cleared.sort(byName),
+    unchanged: unchanged.sort(byName),
+    untouched,
+    readEpoch: result.readEpoch ?? null,
+    elapsedMs: Date.now() - started,
+    cypher,
+  };
+}

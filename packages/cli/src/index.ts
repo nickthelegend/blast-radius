@@ -31,6 +31,7 @@ import { maintainersCommand } from './commands/maintainers.js';
 import { remediateCommand } from './commands/remediate.js';
 import { serveCommand } from './commands/serve.js';
 import { listScenariosCommand, simulateCommand } from './commands/simulate.js';
+import { diffCommand } from './commands/diff.js';
 import { timeMachineCommand } from './commands/timeMachine.js';
 import { typosquatsCommand } from './commands/typosquats.js';
 import { HydraError } from '@blast/core';
@@ -78,6 +79,16 @@ program
   .option('--no-compare', 'skip the "exposed now vs during window" comparison')
   .option('--json', 'emit JSON')
   .action(timeMachineCommand);
+
+program
+  .command('diff')
+  .description('what changed in exposure between two instants')
+  .argument('<version>', 'compromised version key')
+  .option('--from <instant>', 'the earlier instant (defaults to the compromise window start)')
+  .option('--to <instant>', 'the later instant (defaults to now)')
+  .option('--verified', 'read with strong consistency')
+  .option('--json', 'emit JSON')
+  .action(diffCommand);
 
 program
   .command('remediate')
@@ -155,6 +166,8 @@ program
   .option('--repo <name>', 'scope the gate to one repository')
   .option('--fail-on <n>', 'number of exposures that constitutes a failure', '1')
   .option('--max-depth <n>', 'maximum dependency-chain depth')
+  .option('--sarif <file>', 'also write SARIF 2.1.0 for GitHub code scanning')
+  .option('--format <format>', 'output format: text (default) or markdown for a PR comment')
   .option('--json', 'emit JSON')
   .action(ciCommand);
 

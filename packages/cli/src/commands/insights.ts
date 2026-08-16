@@ -13,6 +13,7 @@ import {
   prioritiseExposure,
   renderDot,
   renderIncidentReport,
+  renderSarif,
   timeMachine,
 } from '@blast/core';
 
@@ -306,7 +307,10 @@ export async function ciCommand(options: {
   repo?: string;
   failOn?: string;
   maxDepth?: string;
+  since?: string;
   json?: boolean;
+  sarif?: string;
+  format?: string;
 }): Promise<void> {
   const out = process.stdout;
   let context;
@@ -340,6 +344,42 @@ export async function ciCommand(options: {
         chain: exposure.chainText,
       });
     }
+  }
+
+  // SARIF is what GitHub's code-scanning API ingests; writing it is what turns
+  // the gate from an exit code into findings in the Security tab.
+  if (options.sarif) {
+    const sarif = renderSarif(
+      findings.map((finding) => ({ ...finding, advisory: null, severity: null })),
+      { toolVersion: '1.0.0' },
+    );
+    writeFileSync(options.sarif, `${JSON.stringify(sarif, null, 2)}\n`);
+    out.write(dim(`wrote ${options.sarif} (${findings.length} result(s))\n`));
+  }
+
+  if (options.format === 'markdown') {
+    // The shape a PR comment wants: a verdict line, then a table.
+    out.write(`### Blast Radius — supply-chain gate\n\n`);
+    if (findings.length === 0) {
+      out.write(
+        `**Pass.** ${compromised.length} compromised version(s) checked; nothing in this repository resolves any of them.\n`,
+      );
+    } else {
+      out.write(
+        `**Fail.** ${findings.length} exposure(s) across ${new Set(findings.map((f) => f.repo)).size} repositor(y/ies).\n\n`,
+      );
+      out.write('| repo | compromised version | depth | dependency chain |\n');
+      out.write('|---|---|---|---|\n');
+      for (const finding of findings) {
+        out.write(
+          `| \`${finding.repo}\` | \`${finding.version}\` | ${finding.depth} | \`${finding.chain}\` |\n`,
+        );
+      }
+      out.write(
+        `\n<sub>Run \`blastradius remediate <version>\` for the minimal change that clears these.</sub>\n`,
+      );
+    }
+    process.exit(findings.length >= threshold ? 1 : 0);
   }
 
   if (options.json) {

@@ -660,37 +660,49 @@ Concretely:
 
 ## Architecture
 
+```mermaid
+flowchart TB
+  npm["npm registry API"] --> ingest
+  osv["OSV.dev advisories"] --> ingest
+
+  subgraph ingest["ingest/ — run once, committed"]
+    direction LR
+    crawl["crawl → semver-resolve"] --> org["synthetic org<br/>+ lockfile history"] --> typo["typosquat<br/>candidate search"]
+  end
+
+  ingest -->|"data/snapshot/graph.json"| load
+
+  subgraph load["load & scan"]
+    direction LR
+    loader["batched UNWIND<br/>~43k rows / ~95 round trips"]
+    scan["scan — any real repo's<br/>lockfile → live snapshots"]
+  end
+
+  load --> hydra
+
+  hydra[("HydraDB<br/>object-store native graph<br/>Bolt 7687 · HTTP 8443 · admin 9090")]
+
+  hydra -->|"algo.SSpaths · algo.MSpaths · algo.SPpaths<br/>pinned snapshots · causal / strong"| queries
+
+  subgraph queries["queries/"]
+    direction LR
+    q1["blastRadius<br/>timeMachine<br/>exposureDiff"]
+    q2["remediation<br/>minimalFixSet<br/>insights"]
+    q3["maintainers<br/>typosquats"]
+  end
+
+  queries --> cli["blastradius CLI<br/>23 commands"]
+  queries --> api["Express API<br/>admission control<br/>epoch-invalidated cache"]
+
+  api --> dash["React dashboard<br/>7 sheets · SSE attack clock"]
+  cli --> gate["CI gate<br/>exit 0/1/2 · SARIF 2.1.0"]
+  gate --> gh["GitHub code scanning<br/>Security tab"]
 ```
-                    npm registry API          OSV.dev
-                          │                      │
-                          ▼                      ▼
-   ┌──────────────────────────────────────────────────────┐
-   │  ingest/   crawl → semver-resolve → advisories →      │
-   │            synthetic org + lockfile history →         │
-   │            typosquat candidate search                 │
-   └──────────────────────────┬───────────────────────────┘
-                              │  data/snapshot/graph.json  (committed)
-                              ▼
-   ┌──────────────────────────────────────────────────────┐
-   │  loader     batched UNWIND writes  ~43k rows / ~95 RTs│
-   │  scan/      any real repo's lockfile → live snapshots │
-   └──────────────────────────┬───────────────────────────┘
-                              ▼
-                    ┌───────────────────┐
-                    │      HydraDB      │  Bolt 7687 · HTTP 8443 · admin 9090
-                    │  object-store     │
-                    │  native graph     │
-                    └─────────┬─────────┘
-             algo.SSpaths / algo.MSpaths / pinned snapshots
-                              │
-   ┌──────────────────────────┴───────────────────────────┐
-   │  queries/  blastRadius · timeMachine · maintainers ·  │
-   │            typosquats · remediation · combinedExposure│
-   └───────┬──────────────────────────────────┬───────────┘
-           ▼                                  ▼
-   blastradius CLI                    Express API → React dashboard
-                                       (SSE for the attack clock)
-```
+
+The **one-way arrow that matters** is `ingest → snapshot → load`. Ingestion
+touches the network; everything after it is offline. The demo runs with no
+internet, and the committed snapshot is what makes the numbers in this README
+reproducible.
 
 ```
 bin/

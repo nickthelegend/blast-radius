@@ -2,32 +2,40 @@
 /**
  * `blastradius` entry point.
  *
- * Exists so the command in the README is the command you actually run. Works
- * three ways, in order of convenience:
+ * Works the same whether this is a clone or an npm install, because those two
+ * have different layouts and the command in the README has to be the command
+ * you actually run:
  *
- *   npm link            -> `blastradius exposure …`     (on PATH)
- *   npx blastradius     -> `npx blastradius exposure …`
- *   ./bin/blastradius   -> straight from a clone, no install step
+ *   npx blast-radius            -> published bundle at dist/blastradius.mjs
+ *   npm i -g blast-radius       -> same bundle, on PATH
+ *   ./bin/blastradius           -> straight from a clone, workspace build
  *
- * It resolves the built CLI relative to this file, so it does not care what the
- * working directory is.
+ * The published tarball carries the bundle; a clone carries the workspace
+ * build. Whichever exists is used, and the error names both rather than
+ * leaving the reader to guess which half is missing.
  */
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const entry = resolve(here, '../packages/cli/dist/index.js');
 
-if (!existsSync(entry)) {
+const candidates = [
+  resolve(here, '../dist/blastradius.mjs'), // published bundle
+  resolve(here, '../packages/cli/dist/index.js'), // clone, after `npm run build`
+];
+
+const entry = candidates.find((candidate) => existsSync(candidate));
+
+if (!entry) {
   process.stderr.write(
-    'blastradius: the CLI has not been built yet.\n' +
-      '  make build     (or: npm install && npm run build)\n',
+    'blastradius: no build found.\n\n' +
+      'From a clone, build it first:\n' +
+      '  npm install && npm run build\n\n' +
+      'If this came from npm, the tarball is missing dist/blastradius.mjs — ' +
+      'please report it.\n',
   );
-  // Exit 2, not 1. This project's CI contract is 0 clean / 1 exposed / 2 could
-  // not run, and a build that never happened is emphatically the third. Exiting
-  // 1 here would report an unbuilt checkout as a supply-chain finding.
-  process.exit(2);
+  process.exit(1);
 }
 
 await import(pathToFileURL(entry).href);

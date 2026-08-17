@@ -12,3 +12,7 @@ data/ingest.log
 # The reduced, committed graph snapshot lives in data/snapshot/ and IS tracked.
 # Local HydraDB state:
 hydradb-data/
+
+# Published bundle and pack output — built by `prepack`, never committed.
+*.tgz
+.blastradius/

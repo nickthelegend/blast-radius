@@ -44,6 +44,64 @@ search-indexer            no              yes
 
 ---
 
+## Install
+
+Blast Radius is a Node package. It needs no clone, and it needs no Docker of
+its own — only a HydraDB engine to talk to.
+
+```bash
+npx blast-radius doctor          # no install
+npm install -g blast-radius      # or keep it around
+```
+
+Point it at any engine you already run:
+
+```bash
+HYDRA_HTTP_URL=http://your-host:8443 blastradius exposure npm:debug@4.4.3
+```
+
+### If you need an engine
+
+HydraDB is a Rust binary that links `libcypher-parser`, a C library with no
+Homebrew formula — which is exactly why the sponsor ships it as an image rather
+than expecting you to build it. One container, local-filesystem storage, no
+object store and no compose file:
+
+```bash
+docker volume create hydradb-data
+docker run --rm --user 0:0 -v hydradb-data:/data --entrypoint /bin/sh \
+  ghcr.io/hydra-db/hydradb:latest -c 'mkdir -p /data/store /data/cache; \
+  printf "%s\n" "local-development-token-32-bytes" > /data/auth-token; \
+  chown -R 10001:10001 /data'
+
+docker run -d --name hydradb -p 8443:8443 -p 7687:7687 -p 9090:9090 \
+  -e CLOUD_PROVIDER=local -e LOCAL_PATH=/data/store \
+  -e GRAPH_NAMESPACE=default -e GRAPH_ID=default -e GRAPH_CELL_ID=cell-0 \
+  -e GRAPH_CELLS=cell-0 -e GRAPH_NODE_ID=node-0 \
+  -e GRAPH_BOLT_NODE_ADDRESSES=node-0=127.0.0.1:7687 \
+  -e GRAPH_ADVERTISED_BOLT_ADDR=127.0.0.1:7687 \
+  -e GRAPH_DATA_CACHE_DIR=/data/cache \
+  -e GRAPH_AUTH_TOKEN_FILE=/data/auth-token -e GRAPH_ALLOW_PLAINTEXT=true \
+  -v hydradb-data:/data ghcr.io/hydra-db/hydradb:latest
+```
+
+Then load the graph that ships in the package and open the dashboard:
+
+```bash
+blastradius load && blastradius arm
+blastradius serve
+```
+
+The first step writes an id map to `.blastradius/` in the working directory —
+state belongs next to you, not inside `node_modules`, where the next install
+would delete it.
+
+The repository's `docker-compose.yml` runs the same engine against MinIO
+instead, because the point of this project is HydraDB on an S3-compatible
+object store. The single-container form above is for reading the code without
+standing that up.
+
+
 ## Contents
 
 - [Quick start](#quick-start)

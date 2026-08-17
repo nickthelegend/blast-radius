@@ -443,7 +443,14 @@ export class HydraClient {
       // read. `transport` is retryable: a dropped connection or an abort says
       // nothing about whether the query itself is sound.
       throw new HydraError(
-        `HydraDB unreachable at ${this.endpoint}: ${reason}. Is it running? Try \`make db-up\`.`,
+        `HydraDB unreachable at ${this.endpoint}: ${reason}.\n\n` +
+          `Point at an engine you already run:\n` +
+          `  HYDRA_HTTP_URL=http://your-host:8443 blastradius <command>\n\n` +
+          `or start one locally (no clone needed):\n` +
+          `  docker run -d -p 8443:8443 -p 7687:7687 -p 9090:9090 \\\n` +
+          `    -e CLOUD_PROVIDER=local -e LOCAL_PATH=/data/store \\\n` +
+          `    -e GRAPH_AUTH_TOKEN=local-development-token-32-bytes \\\n` +
+          `    -v hydradb-data:/data ghcr.io/hydra-db/hydradb:latest`,
         null,
         cypher,
         error,

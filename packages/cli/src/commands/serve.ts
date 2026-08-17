@@ -971,12 +971,23 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
 
   // --- static dashboard ----------------------------------------------------
 
+  // The dashboard's build sits in a different place depending on how this is
+  // running: from a clone the CLI lives in packages/cli/dist, and from an npm
+  // install the whole thing is bundled to dist/ at the package root. Both are
+  // checked rather than assuming a layout, because getting this wrong serves a
+  // working API with a blank page — the least useful possible failure.
   const here = dirname(fileURLToPath(import.meta.url));
-  const dashboardDist = resolve(here, '../../../dashboard/dist');
-  if (existsSync(dashboardDist)) {
-    app.use(express.static(dashboardDist));
+  const dashboardDist = [
+    resolve(here, '../../../dashboard/dist'), // clone: packages/cli/dist -> packages/dashboard/dist
+    resolve(here, '../packages/dashboard/dist'), // npm: dist/ -> packages/dashboard/dist
+    resolve(here, './dashboard'), // npm: dist/dashboard
+  ].find((candidate) => existsSync(candidate));
+
+  if (dashboardDist !== undefined) {
+    const staticRoot = dashboardDist;
+    app.use(express.static(staticRoot));
     app.get('*', (_req, res) => {
-      res.sendFile(join(dashboardDist, 'index.html'));
+      res.sendFile(join(staticRoot, 'index.html'));
     });
   }
 
@@ -984,7 +995,7 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
     app.listen(port, () => {
       const out = process.stdout;
       out.write(`${bold('Blast Radius API')} listening on ${cyan(`http://127.0.0.1:${port}`)}\n`);
-      if (existsSync(dashboardDist)) {
+      if (dashboardDist !== undefined) {
         out.write(`${bold('Dashboard')}        ${cyan(`http://127.0.0.1:${port}`)}\n`);
       } else {
         out.write(

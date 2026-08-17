@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": false,
   "type": "module",
-  "description": "Blast Radius \u2014 a live, queryable supply-chain attack graph built on HydraDB",
+  "description": "Supply-chain blast radius on a real graph database: who ran a malicious package version, and who merely resolves it today.",
   "license": "MIT",
   "engines": {
     "node": ">=20"
@@ -18,7 +18,8 @@
     "typecheck": "tsc -b packages/core packages/cli --pretty",
     "test": "vitest run",
     "test:watch": "vitest",
-    "cli": "node --experimental-strip-types packages/cli/src/index.ts"
+    "cli": "node --experimental-strip-types packages/cli/src/index.ts",
+    "prepack": "npm run build && node scripts/bundle.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
@@ -26,12 +27,29 @@
     "vitest": "^2.1.8"
   },
   "bin": {
-    "blastradius": "bin/blastradius"
+    "blastradius": "bin/blastradius",
+    "blast-radius": "bin/blastradius"
   },
   "files": [
     "bin",
-    "packages/core/dist",
-    "packages/cli/dist",
-    "data/snapshot"
+    "dist",
+    "packages/dashboard/dist",
+    "data/snapshot",
+    "README.md",
+    "LICENSE"
+  ],
+  "optionalDependencies": {
+    "neo4j-driver": "^6.2.0"
+  },
+  "keywords": [
+    "supply-chain",
+    "security",
+    "sbom",
+    "dependency-graph",
+    "lockfile",
+    "npm",
+    "advisory",
+    "graph-database",
+    "hydradb"
   ]
 }

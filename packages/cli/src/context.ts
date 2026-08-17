@@ -1,4 +1,5 @@
-import { join } from 'node:path';
+import { accessSync, constants, mkdirSync } from 'node:fs';
+import { join, sep } from 'node:path';
 
 import {
   HydraClient,
@@ -21,7 +22,12 @@ export interface Context {
 export function createContext(): Context {
   const config = loadConfig();
   const client = new HydraClient(hydraConfigFrom(config));
-  const idMapPath = join(config.paths.snapshot, ID_MAP_FILE);
+  // The id map is *written* state, and the snapshot directory it sits beside
+  // is read-only when this is installed from npm — it lives under
+  // node_modules, which any reinstall deletes. So writes go to the working
+  // directory unless the snapshot directory is genuinely writable, which it is
+  // in a clone.
+  const idMapPath = writableIdMapPath(config.paths.snapshot);
   const ids = IdRegistry.load(idMapPath);
   return { config, client, ids, idMapPath };
 }
@@ -74,4 +80,26 @@ export function parseInstant(value: string, label: string): number {
     );
   }
   return parsed;
+}
+
+/**
+ * Where the id map can actually be written.
+ *
+ * A clone keeps it beside the snapshot it belongs to. An npm install cannot:
+ * the package directory may be read-only, and even when it is not, writing
+ * state into `node_modules` means losing it on the next install. There it goes
+ * to `.blastradius/` in the working directory instead.
+ */
+function writableIdMapPath(snapshotDir: string): string {
+  try {
+    accessSync(snapshotDir, constants.W_OK);
+    if (!snapshotDir.includes(`${sep}node_modules${sep}`)) {
+      return join(snapshotDir, ID_MAP_FILE);
+    }
+  } catch {
+    /* fall through to the working directory */
+  }
+  const local = join(process.cwd(), '.blastradius');
+  mkdirSync(local, { recursive: true });
+  return join(local, ID_MAP_FILE);
 }

@@ -262,7 +262,16 @@ export async function doctorCommand(options: { bolt?: boolean } = {}): Promise<v
   out.write(`  ${pad('/readyz', 22)} ${ready ? green('200 OK') : red('unreachable')}\n`);
   if (!ready) {
     out.write(
-      yellow(`\nHydraDB is not answering. Start it with:\n  make db-up\n`),
+      yellow(
+        `\nHydraDB is not answering.\n\n` +
+          `Point at an engine you already run:\n` +
+          `  HYDRA_HTTP_URL=http://your-host:8443 blastradius <command>\n\n` +
+          `or start one locally (no clone needed):\n` +
+          `  docker run -d -p 8443:8443 -p 7687:7687 -p 9090:9090 \\\n` +
+          `    -e CLOUD_PROVIDER=local -e LOCAL_PATH=/data/store \\\n` +
+          `    -e GRAPH_AUTH_TOKEN=local-development-token-32-bytes \\\n` +
+          `    -v hydradb-data:/data ghcr.io/hydra-db/hydradb:latest\n`,
+      ),
     );
     process.exit(1);
   }

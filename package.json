@@ -1,5 +1,5 @@
 {
-  "name": "blast-radius",
+  "name": "@xorv/blast",
   "version": "1.0.0",
   "private": false,
   "type": "module",
@@ -51,5 +51,16 @@
     "advisory",
     "graph-database",
     "hydradb"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nickthelegend/blast-radius.git"
+  },
+  "homepage": "https://github.com/nickthelegend/blast-radius#readme",
+  "bugs": {
+    "url": "https://github.com/nickthelegend/blast-radius/issues"
+  }
 }

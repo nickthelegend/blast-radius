@@ -50,8 +50,8 @@ Blast Radius is a Node package. It needs no clone, and it needs no Docker of
 its own — only a HydraDB engine to talk to.
 
 ```bash
-npx blast-radius doctor          # no install
-npm install -g blast-radius      # or keep it around
+npx @xorv/blast doctor           # no install
+npm install -g @xorv/blast       # or keep it around
 ```
 
 Point it at any engine you already run:
@@ -177,13 +177,13 @@ depend on real packages, with a generated history of lockfile captures.
 
 | | count |
 |---|---|
-| `Package` | 1,399 |
-| `Version` | 12,351 |
+| `Package` | 1,480 |
+| `Version` | 12,463 |
 | `Maintainer` | 313 |
-| `Repo` | 18 |
-| `LockfileSnapshot` | 123 |
-| `RESOLVED_TO` edges | 9,846 |
-| `RESOLVED` edges | 6,942 |
+| `Repo` | 19 |
+| `LockfileSnapshot` | 124 |
+| `RESOLVED_TO` edges | 10,015 |
+| `RESOLVED` edges | 7,182 |
 | `MAINTAINS` edges | 815 |
 | `NAME_SIMILAR_TO` edges | 200 |
 | real OSV advisories matched | 40 |

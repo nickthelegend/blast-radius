@@ -238,7 +238,10 @@ describe("this repository's own lockfile", () => {
   it('parses the real 281-package v3 lockfile', () => {
     const parsed = parseLockfileAt(REPO_ROOT);
     expect(parsed.kind).toBe('package-lock.json');
-    expect(parsed.projectName).toBe('blast-radius');
+    // The published name. This assertion exists because the self-scan reads
+    // *this* repository, so a rename that misses the lockfile would silently
+    // scan under the wrong project name — which is exactly what it caught.
+    expect(parsed.projectName).toBe('@xorv/blast');
     expect(parsed.entries.length).toBeGreaterThan(200);
     expect(parsed.resolutions.length).toBeGreaterThan(200);
   });

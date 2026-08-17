@@ -1373,3 +1373,12 @@ tbody tr.row-selected td:first-child { color: var(--ink); }
   background: var(--survey-deep);
   border-left: 2px solid var(--survey);
 }
+
+/* Data provenance in the title block. Deliberately quiet — it is a standing
+   caveat, not a warning — but never hidden, because the reader has to know
+   which half of what they are looking at is real. */
+.provenance {
+  color: var(--ink-3);
+  border-bottom: 1px dotted var(--rule-lit);
+  cursor: help;
+}

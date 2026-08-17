@@ -214,6 +214,19 @@ export function App(): JSX.Element {
             <span>supply-chain attack graph</span>
             <span className="sep" aria-hidden="true" />
             <span>HydraDB</span>
+            <span className="sep" aria-hidden="true" />
+            {/* The packages, versions and advisories are real, crawled from npm
+                and OSV. The organisation on top of them is not. Saying so in the
+                title block rather than only in the README is the difference
+                between a reader inferring these are real repositories and
+                knowing they are not — and this product's whole argument is that
+                it does not overstate a finding. */}
+            <span
+              className="provenance"
+              title="Packages, versions and advisories are real, crawled from the npm registry and OSV. The 18 repositories and their lockfile history are generated, so the exposure findings describe a synthetic organisation depending on real packages."
+            >
+              real packages · synthetic org
+            </span>
           </div>
           {/* The extent is a count over every edge type, which is a full scan and
               can take seconds on a cold cache. The block keeps its shape and

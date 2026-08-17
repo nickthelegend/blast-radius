@@ -112,7 +112,7 @@ Depth: **core** (the engine does the work) · **surface** (a call, but the logic
 | 3 | **Failure-class-aware retry** — retry contention and routing, never retry `query`; surface freshness failures as staleness | `graph_query_failed_by_class` | core | Correct distributed-systems behaviour driven by the engine's own taxonomy |
 | — | ~~**Snapshot-pinned incident workspace**~~ **NOT BUILDABLE** for the same reason: a sheet cannot be pinned to a past epoch when the engine only ever reads the present. What *is* buildable — and shipped — is pinning to a past *capture instant* via `captured_at`, which is a property of the data rather than of storage |
 | 5 | **Truncation-proof traversal** — detect `pathCount` saturation and re-issue with a widened budget, reporting both | `algo.SSpaths` path budget semantics | core | Directly addresses the engine's silent-truncation trap this project documented |
-| 6 | **Multi-seed blast radius** — every version an advisory affects as indexed sources in one `MSpaths` call | `algo.MSpaths` indexed selectors | core | One round trip where every competitor loops |
+| 6 | **Multi-seed blast radius** — every version an advisory affects as indexed sources in one `MSpaths` call | `algo.MSpaths` indexed selectors | core | **BUILT.** `GHSA-4x5r-pxfx-6jf8` covers 7 versions and reaches 5 repositories historically — one round trip, not seven |
 | 7 | **Bitemporal "as-of" console** — run any user Cypher as of a past *capture instant*, rewritten over `captured_at` / `superseded_at` | bitemporal data model + `WHERE` ranges | core | Time travel over arbitrary queries. Engine epochs cannot do this; the data model can |
 | 8 | **Reverse-reachability with edge-type ablation** — same traversal with `RESOLVED_DIRECT` on and off, side by side | `relTypes` on `SSpaths` | core | Makes the modelling decision visible as a measurement |
 | 9 | **Consistency A/B** — same query at `causal` and `strong`, showing epoch and any row delta | consistency modes | core | Demonstrates a real distributed-systems trade-off live |
@@ -126,7 +126,7 @@ Depth: **core** (the engine does the work) · **surface** (a call, but the logic
 | 17 | **Idempotent replay** — re-run a whole ingest with the same `query_id`s and prove zero duplicate rows | client-supplied `query_id` | core | Exactly-once semantics demonstrated, not asserted |
 | 18 | **Epoch-stamped SBOM** — every CycloneDX export carries the read epoch it was taken at | `read_epoch` | core | An SBOM you can reproduce byte-for-byte later |
 | 19 | **Snapshot-diffed CI gate** — fail only on exposure introduced between the base epoch and the head epoch | epochs + `MSpaths` | core | Turns the gate from stateful-guess into an exact comparison |
-| 20 | **Maintainer blast radius at depth N** — walk `MAINTAINS` both directions with a tunable `maxLen` | `SSpaths` `relDirection: 'both'` | core | Credential-compromise reach, engine-computed |
+| 20 | **Maintainer blast radius at depth N** — walk `MAINTAINS` both directions with a tunable `maxLen` | `SSpaths` `relDirection: 'both'` | core | **BUILT.** 3 → 6 → 47 neighbours across rings 1–3. The parser had to be generalised first: it hard-coded the first ring, so a deeper `maxLen` cost the engine real work and changed nothing |
 | 21 | **Path-budget calibration tool** — sweep `pathCount` and chart where results stop growing | `SSpaths` budget | core | Empirically finds the right setting instead of guessing |
 | 22 | **Query cost ledger** — per-query elapsed, rows, epoch, cursor pages, written to the graph itself | `/metrics` + writes | core | The tool measuring itself in its own database |
 | 23 | **Live epoch ticker** — show the graph's epoch advancing as writes land | `read_epoch` | core | Makes "the database is alive" visible in one number |
@@ -141,7 +141,7 @@ Depth: **core** (the engine does the work) · **surface** (a call, but the logic
 | 32 | **Direct-vs-transitive split** in one traversal | two edge types | core | One call answers what most tools need two for |
 | 33 | **Per-repo exposure timeline** from snapshot history | range predicates | core | Bitemporal reporting per service |
 | 34 | **Advisory reach in both tenses** (shipped) | `MATCH` + `is_current` | core | Already the strongest finding in the product |
-| 35 | **Lockfile drift detector** — repos whose snapshots stopped updating | `captured_at` ranges | core | Finds unmaintained services from graph shape |
+| 35 | **Lockfile drift detector** — repos whose snapshots stopped updating | `captured_at` ranges | core | **BUILT.** 9 of 19 repositories sit behind the organisation's own median capture date; stalest is `fraud-detection` |
 | 36 | **Blast radius as a saved query** stored as graph nodes | writes + reads | surface | Queries become first-class data |
 | 37 | **Engine capability self-test** exposed in the UI (extends `doctor`) | procedure probes | surface | Shows the engine's real limits honestly |
 | 38 | **Slow-query log** written back to the graph | writes | surface | Observability without extra infrastructure |

@@ -25,6 +25,14 @@ export interface SharedMaintainerPackage {
   /** True when the org's own dependency set includes this package — a shared
    *  maintainer matters far more when you already ship their other code. */
   isOrgDependency: boolean;
+  /**
+   * How many maintainer hops away this package is.
+   *
+   * `1` shares a maintainer directly with the subject. `2` is reached through
+   * one of *those* packages' other maintainers — the next place a stolen
+   * credential travels. Only populated above the default depth.
+   */
+  ring: number;
 }
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
@@ -60,11 +68,29 @@ export async function orgDependencyKeys(
 export async function maintainerWeb(
   client: HydraClient,
   pkg: PackageRef,
-  options: { pathCount: number; resultLimit: number; consistency?: QueryOptions['consistency'] },
+  options: {
+    pathCount: number;
+    resultLimit: number;
+    consistency?: QueryOptions['consistency'];
+    /**
+     * How far to walk the maintainer graph.
+     *
+     * `2` is package → maintainer → package: the packages sharing a maintainer
+     * with this one, which is the credential-compromise question. `4` adds
+     * their maintainers and *their* packages — the second ring, which is where
+     * a compromise spreads next. Larger rings grow fast, so the default stays
+     * at the question the sheet actually asks.
+     */
+    depth?: number;
+  },
 ): Promise<MaintainerWebReport> {
+  // Only even depths describe a whole package→maintainer→package hop; an odd
+  // maxLen would stop on a maintainer and return half a relationship.
+  const requested = options.depth ?? 2;
+  const maxLen = Math.max(2, Math.min(6, requested % 2 === 0 ? requested : requested + 1));
   const cypher =
     `CALL algo.SSpaths({sourceNode: ${pkg.id}, relTypes: ['MAINTAINS'], relDirection: 'both', ` +
-    `maxLen: 2, pathCount: ${options.pathCount}, resultLimit: ${options.resultLimit}}) ` +
+    `maxLen: ${maxLen}, pathCount: ${options.pathCount}, resultLimit: ${options.resultLimit}}) ` +
     `YIELD path RETURN path`;
 
   const [result, orgDeps] = await Promise.all([
@@ -82,7 +108,13 @@ export async function maintainerWeb(
     const last = path.nodes[path.nodes.length - 1];
     if (!last) continue;
 
-    if (last.labels.includes('Maintainer') && path.nodes.length === 2) {
+    // A path ending on a Maintainer is the subject's own maintainer set; a
+    // path ending on a Package is a neighbour. Both arrive at every even/odd
+    // length as the traversal widens, so the shape is derived from the path
+    // rather than hard-coded to the first ring — otherwise a deeper `maxLen`
+    // costs the engine real work and changes nothing the reader can see.
+    const isFirstRingMaintainer = last.labels.includes('Maintainer') && path.nodes.length === 2;
+    if (isFirstRingMaintainer) {
       const key = str(last.properties.key);
       if (!maintainerCounts.has(key)) {
         maintainerCounts.set(key, {
@@ -94,11 +126,15 @@ export async function maintainerWeb(
       continue;
     }
 
-    if (!last.labels.includes('Package') || path.nodes.length !== 3) continue;
+    // Packages sit at odd path lengths: 3 nodes = ring 1, 5 = ring 2, 7 = 3.
+    if (!last.labels.includes('Package') || path.nodes.length % 2 === 0) continue;
+    const ring = (path.nodes.length - 1) / 2;
     const neighborKey = str(last.properties.key);
     if (neighborKey === pkg.key) continue;
 
-    const middle = path.nodes[1];
+    // The maintainer that connects this neighbour is the node just before it,
+    // whichever ring it sits in.
+    const middle = path.nodes[path.nodes.length - 2];
     const maintainerKey = middle ? str(middle.properties.key) : '';
     const maintainerName = middle ? str(middle.properties.username) : '';
     if (maintainerKey) {
@@ -116,6 +152,9 @@ export async function maintainerWeb(
       if (maintainerName && !existing.sharedMaintainers.includes(maintainerName)) {
         existing.sharedMaintainers.push(maintainerName);
       }
+      // The same package can be reached by several routes; the shortest one is
+      // the honest description of how close it is.
+      existing.ring = Math.min(existing.ring, ring);
     } else {
       neighbors.set(neighborKey, {
         packageKey: neighborKey,
@@ -123,6 +162,7 @@ export async function maintainerWeb(
         sharedMaintainers: maintainerName ? [maintainerName] : [],
         downloads: numberOf(last.properties.downloads),
         isOrgDependency: orgDeps.has(neighborKey),
+        ring,
       });
     }
   }

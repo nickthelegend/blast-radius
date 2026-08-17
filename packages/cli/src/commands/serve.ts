@@ -16,9 +16,11 @@ import {
   listCompromisedVersions,
   listRepos,
   ablateEdgeTypes,
+  advisoryRadius,
   boltQuery,
   calibrateBudget,
   compareConsistency,
+  lockfileDrift,
   resolveRepoKeys,
   suggestVersions,
   listVersionsOfPackage,
@@ -471,10 +473,15 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
         res.status(404).json({ error: `package not found: ${key}` });
         return;
       }
+      // `depth` widens the maintainer traversal a whole hop at a time; the
+      // sheet's default question is the first ring, so an absent or unusable
+      // value stays there rather than silently costing the engine more.
+      const requestedDepth = Number(req.query.depth);
       res.json(
         await maintainerWeb(client, pkg, {
           pathCount: config.traversal.pathCount,
           resultLimit: config.traversal.resultLimit,
+          depth: Number.isFinite(requestedDepth) && requestedDepth > 0 ? requestedDepth : undefined,
         }),
       );
     }),
@@ -629,6 +636,33 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
     }
     return version;
   };
+
+  app.get(
+    '/api/advisory-radius',
+    handle(async (req, res) => {
+      const id = required(req, res, 'id');
+      if (id === null) return;
+      try {
+        res.json(
+          await advisoryRadius(client, id, {
+            maxDepth: config.traversal.maxDepth,
+            pathCount: config.traversal.pathCount,
+            resultLimit: config.traversal.resultLimit,
+            consistency: config.traversal.readConsistency,
+          }),
+        );
+      } catch (error) {
+        res.status(404).json({ error: error instanceof Error ? error.message : String(error) });
+      }
+    }),
+  );
+
+  app.get(
+    '/api/drift',
+    handle(async (_req, res) => {
+      res.json(await lockfileDrift(client, { consistency: config.traversal.readConsistency }));
+    }),
+  );
 
   app.get(
     '/api/lab/budget',

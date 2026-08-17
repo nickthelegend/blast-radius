@@ -143,10 +143,11 @@ export async function verifyBolt(
       });
     }
   } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
     checks.push({
       name: 'Bolt connectivity',
       ok: false,
-      detail: error instanceof Error ? error.message : String(error),
+      detail: explainBoltFailure(raw),
     });
   } finally {
     try {
@@ -229,4 +230,36 @@ export async function boltQuery(
     await session?.close();
     await driver?.close();
   }
+}
+
+/**
+ * Turn a Neo4j driver error into something actionable.
+ *
+ * The empty-routing-table failure earns special handling because its raw form —
+ * a `RoutingTable[...routers=[], readers=[], writers=[]]` dump — reads like a
+ * driver bug and is nothing of the kind: the engine is up and answering HTTP
+ * normally, it just is not publishing a Bolt route.
+ *
+ * Observed once on this deployment, and deliberately described as intermittent
+ * rather than explained, because it could not be reproduced: after it appeared,
+ * Bolt stayed dead across a full minute of polling while HTTP answered in under
+ * six seconds, and a container recreate fixed it on the first attempt — but
+ * four subsequent restarts all came back healthy. The remedy is known; the
+ * trigger is not, and guessing at one in an error message a user will trust
+ * would be worse than saying so.
+ */
+export function explainBoltFailure(raw: string): string {
+  if (/routing/i.test(raw) && /routers=\[\]/.test(raw)) {
+    return (
+      'the engine is up but publishes no Bolt route (empty routing table). ' +
+      'Seen intermittently after a container restart, with the placement view ' +
+      'stuck at `fresh`; HTTP keeps working throughout, which is why only Bolt ' +
+      'fails. Recreating the container has cleared it every time:\n' +
+      '       docker compose up -d --force-recreate hydradb'
+    );
+  }
+  if (/ECONNREFUSED|connect/i.test(raw)) {
+    return `nothing is listening on the Bolt port — is the engine running? (${raw.slice(0, 80)})`;
+  }
+  return raw;
 }

@@ -116,7 +116,7 @@ Real, in the repository, and never to be fabricated around:
   exposed through `vitest@2.1.9 → debug@4.4.3`.
 - Real measured timings and read epochs surfaced throughout the UI.
 - Two GitHub Actions workflows that pass on a real runner.
-- `docs/hydradb-findings.md` — twelve documented engine findings with evidence,
+- `docs/hydradb-findings.md` — thirteen documented engine findings with evidence,
   including a case where `algo.MSpaths` with `pairwise: true` silently drops
   pairs.
 

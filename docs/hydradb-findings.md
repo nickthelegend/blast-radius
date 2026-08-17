@@ -351,3 +351,30 @@ same way, which is itself the evidence.
 Blast Radius surfaces the zero in the Engine sheet with that explanation rather
 than hiding the row. A metric that reads zero for a knowable reason is more
 informative than one that is absent.
+
+## 13. Bolt can come back from a restart publishing no route
+
+Seen once, and recorded as unexplained rather than explained.
+
+After a `docker compose restart`, the engine answered HTTP normally within six
+seconds while Bolt stayed unusable for a full minute of polling. The driver
+error names the condition exactly:
+
+```
+Could not perform discovery. No routing servers available.
+Known routing table: RoutingTable[database=default, routers=[], readers=[], writers=[]]
+```
+
+The engine's own log showed the placement view at `hydradb.placement.state:
+"fresh"` and never advancing. `docker compose up -d --force-recreate hydradb`
+cleared it on the first attempt.
+
+**The honest limit of this finding:** four subsequent restarts all came back
+with Bolt healthy, so a restart is not sufficient to reproduce it. The remedy is
+known; the trigger is not. `blastradius doctor --bolt` now recognises the empty
+routing table and prints the recreate command, because the raw driver message
+reads like a client bug when the client is fine — but it says "seen
+intermittently" rather than naming a cause the evidence does not support.
+
+This matters beyond the demo: an application that health-checks only the HTTP
+API would consider this node healthy while every Bolt consumer fails.

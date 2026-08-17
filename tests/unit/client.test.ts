@@ -14,6 +14,7 @@
  */
 import { describe, expect, it, vi, afterEach } from 'vitest';
 
+import { explainBoltFailure } from '../../packages/core/src/hydra/bolt.js';
 import { HydraClient } from '../../packages/core/src/hydra/client.js';
 
 const config = {
@@ -166,5 +167,29 @@ describe('cursor pagination', () => {
     await client.query('MATCH (n) RETURN n.k AS k');
     expect(ids.length).toBe(2);
     expect(ids[0]).not.toBe(ids[1]);
+  });
+});
+
+describe('bolt failure diagnosis', () => {
+  it('explains an empty routing table instead of dumping the driver error', () => {
+    const raw =
+      'Could not perform discovery. No routing servers available. Known routing ' +
+      'table: RoutingTable[database=default, routers=[], readers=[], writers=[]]';
+    const explained = explainBoltFailure(raw);
+
+    expect(explained).toContain('publishes no Bolt route');
+    expect(explained).toContain('--force-recreate');
+    // Honest about what is known: the remedy, not an invented cause.
+    expect(explained).toContain('intermittently');
+  });
+
+  it('names the likely cause when nothing is listening', () => {
+    expect(explainBoltFailure('connect ECONNREFUSED 127.0.0.1:7687')).toContain(
+      'is the engine running?',
+    );
+  });
+
+  it('passes an unrecognised error through unchanged', () => {
+    expect(explainBoltFailure('something else entirely')).toBe('something else entirely');
   });
 });

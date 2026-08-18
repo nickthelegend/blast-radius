@@ -1,5 +1,7 @@
 # Blast Radius
 
+[![npm](https://img.shields.io/npm/v/@xorv/blast)](https://www.npmjs.com/package/@xorv/blast)
+
 **A live, queryable supply-chain attack graph, built on [HydraDB](https://github.com/hydra-db/hydradb).**
 
 > A package is compromised at 09:00. Which of your services are exposed by 09:06?

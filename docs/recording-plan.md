@@ -145,11 +145,11 @@ npx @xorv/blast doctor
 
 > "One npm install, point it at any HydraDB, and it's yours."
 
-**Only record this beat once the package is actually published.** It is built,
-verified against a clean-directory install, and blocked solely on an npm token
-with publish scope. Until then, the honest substitute is the same command from
-a local install — or cut the beat. A judge who runs `npx @xorv/blast` and gets a
-404 has just been shown the one thing that was not real.
+**Published and verified from the registry**, not from a local tarball: a cold
+`npx --yes @xorv/blast doctor` in an empty directory with the npm cache cleared
+reaches the engine and prints the graph counts. The scan beat works the same
+way — `npx @xorv/blast scan <path>` on a repository the graph has never seen
+returns `EXPOSED ... at depth 2` with the chain.
 
 ---
 

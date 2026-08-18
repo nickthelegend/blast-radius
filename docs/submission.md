@@ -60,7 +60,7 @@ exits non-zero but findings in the repository's Security tab that annotate the
 pull request and close themselves when the exposure clears. That is live on this
 repository right now.
 
-It ships a CLI, a nine-view live dashboard, and a scripted incident simulator
+It ships a CLI, a ten-view live dashboard, and a scripted incident simulator
 that replays the May 2026 TanStack worm pattern against the real graph with an
 attack clock.
 
@@ -138,7 +138,7 @@ local instances slow down until the volume is recreated.
 **Data**
 
 Real. ~300 of the most-depended-on npm packages expanded through their actual
-dependency trees: 1,399 packages, 12,351 versions, 9,846 resolved edges, 313
+dependency trees: 1,480 packages, 12,463 versions, 10,015 resolved edges, 313
 maintainers, and 40 genuine OSV.dev advisories matched to versions in the graph.
 Version ranges are resolved with `semver`, exactly as a package manager would.
 
@@ -159,7 +159,7 @@ make serve         # dashboard on http://127.0.0.1:4000
 ```
 
 `make doctor` verifies connectivity and asserts every engine capability used.
-`make test` runs 140 tests in ~80s.
+`make test` runs 143 tests in ~80s.
 
 ---
 
@@ -170,7 +170,18 @@ history.
 
 **Demo video**
 
-`<URL>` — under 3 minutes. Script in `docs/demo-script.md`.
+`<URL>` — under 3 minutes. Shot list, measured timings and the pre-flight
+checklist are in `docs/recording-plan.md`.
+
+**Try it without cloning anything**
+
+```bash
+npx @xorv/blast doctor
+```
+
+Published at https://www.npmjs.com/package/@xorv/blast — point it at any HydraDB
+with `HYDRA_HTTP_URL`, or start one with the single container documented in the
+README.
 
 ---
 

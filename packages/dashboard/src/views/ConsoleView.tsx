@@ -72,6 +72,19 @@ ORDER BY captured`,
   },
 ];
 
+/**
+ * A failure that never reached the query planner.
+ *
+ * Routing, connection and discovery errors describe the path to the engine, not
+ * the Cypher sent down it — telling the reader their query was rejected is
+ * actively misleading when the query was never seen.
+ */
+function isTransportFailure(message: string): boolean {
+  return /routing|could not perform discovery|ECONNREFUSED|unreachable|socket hang up/i.test(
+    message,
+  );
+}
+
 export function ConsoleView({
   seedVersionKey,
   initialQuery,
@@ -260,16 +273,33 @@ export function ConsoleView({
         </div>
       </div>
 
-      {result?.queryError && (
-        <div className="error">
-          <b>The engine rejected this query.</b>
-          <div style={{ marginTop: 6 }}>{result.queryError}</div>
-          <div className="muted" style={{ marginTop: 8 }}>
-            HydraDB implements a deliberate subset of OpenCypher and rejects the rest at parse time
-            rather than planning something slow. That is the real error message, unmodified.
+      {result?.queryError &&
+        (isTransportFailure(result.queryError) ? (
+          // A transport failure is not the query's fault, and saying "the
+          // engine rejected this query" over a routing error sends the reader
+          // to debug perfectly good Cypher. Seen for real: Bolt intermittently
+          // comes back from a restart publishing no route while HTTP keeps
+          // answering, and the console blamed the query.
+          <div className="error">
+            <b>Could not reach the engine over this transport.</b>
+            <div style={{ marginTop: 6 }}>{result.queryError}</div>
+            <div className="muted" style={{ marginTop: 8 }}>
+              The query was never evaluated. HydraDB sometimes returns from a container restart
+              publishing no Bolt route, while the HTTP API keeps answering normally — untick{' '}
+              <em>over Bolt</em> to run the same query over HTTP, or recreate the container with{' '}
+              <span className="mono">docker compose up -d --force-recreate hydradb</span>.
+            </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="error">
+            <b>The engine rejected this query.</b>
+            <div style={{ marginTop: 6 }}>{result.queryError}</div>
+            <div className="muted" style={{ marginTop: 8 }}>
+              HydraDB implements a deliberate subset of OpenCypher and rejects the rest at parse
+              time rather than planning something slow. That is the real error message, unmodified.
+            </div>
+          </div>
+        ))}
 
       {result && !result.queryError && (
         <div className="panel">

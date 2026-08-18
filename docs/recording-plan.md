@@ -38,6 +38,40 @@ only ~10 seconds, so this is cheap to fix and expensive to miss.
 
 ---
 
+## Rehearsal results — measured on a full dry run
+
+Every beat timed end to end. Nothing here is estimated.
+
+| Beat | On-camera duration |
+|---|---|
+| `blastradius scan <repo>` → EXPOSED + chain | **2.6s** |
+| Blast Radius sheet (warm) | ~1.5s |
+| Time Machine (the money shot) | **1.1s** |
+| Remediation | **5.1s** — the longest wait; narrate through it |
+| Console, query over HTTP | 1.0s |
+| Console, same query over Bolt | 2.0s |
+| Engine sheet | 0.5s |
+| `blastradius ci` → FAIL, exit 1 | 1.2s |
+| `npx @xorv/blast doctor`, cold | **4.9s** — npm fetches the package; say so while it runs |
+
+**A live scan visibly moves the masthead**: repos 19 → 20 and the Blast Radius
+badge 6 → 7. Scan *on camera* rather than pre-loading, and point at the counter.
+Reset first with `blastradius forget victim-app`, or the scan reports the repo
+as already known and nothing moves.
+
+**Two defects the rehearsal caught**, both now fixed:
+
+- Bolt failed mid-session with an empty routing table — the intermittent
+  condition from finding 13 — *after* pre-flight had passed 12/12. It recovered
+  on its own. Assume it can happen during a take.
+- Worse, the console blamed the *query*: "The engine rejected this query …
+  HydraDB implements a deliberate subset of OpenCypher". The query was fine and
+  was never evaluated. The console now separates transport failures from query
+  rejections and tells the reader to untick *over Bolt* or recreate the
+  container.
+
+---
+
 ## Part 1 — The main demo video (target 3:00)
 
 The one asset that decides the round. Structure it so the differentiator lands

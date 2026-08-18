@@ -18,6 +18,7 @@ import {
   ablateEdgeTypes,
   advisoryRadius,
   boltQuery,
+  explainBoltFailure,
   calibrateBudget,
   compareConsistency,
   lockfileDrift,
@@ -569,7 +570,12 @@ export async function serveCommand(options: { port?: string; open?: boolean }): 
             elapsedMs: Date.now() - started,
             wallMs: Date.now() - started,
             transport: 'bolt',
-            queryError: error instanceof Error ? error.message : String(error),
+            // Same diagnosis `doctor --bolt` gives, rather than the raw driver
+            // dump: an empty routing table is an engine-side condition with a
+            // known remedy, not something the caller can fix in their query.
+            queryError: explainBoltFailure(
+              error instanceof Error ? error.message : String(error),
+            ),
           });
         }
         return;
